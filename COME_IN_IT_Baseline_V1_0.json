@@ -1,0 +1,115 @@
+{
+  "baselineVersion": "1.0",
+  "packageName": "COME IN IT — Baseline V1.0",
+  "generatedAt": "2026-08-14",
+  "language": "ar",
+  "purpose": "مرجع هيكلي لتحليل معمارية الثقة والهوية والكيانات والمنتجات والمطابقة والسيادة السحابية.",
+  "governingRule": "لا جهة مجهولة تتاجر مع جهة مجهولة، ولا يُجرى أي تداول على منتج مجهول.",
+  "trustSequence": [
+    "PERSON",
+    "KYC",
+    "VERIFIED_IDENTITY",
+    "ENTITY",
+    "KYB",
+    "BUSINESS_IDENTITY",
+    "ROLES",
+    "PERMISSIONS",
+    "PRODUCT_SERVICE_ASSET_IDENTITY",
+    "PRODUCT_SERVICE_ASSET_VERIFICATION",
+    "MATCHING",
+    "TRADE_ACCESS",
+    "TRANSACTION",
+    "AUDIT",
+    "INTELLIGENCE"
+  ],
+  "tradeModels": ["B2B", "B2C", "C2B", "C2C", "B2G"],
+  "dataClassification": ["PUBLIC", "VERIFIED", "RESTRICTED", "CONFIDENTIAL"],
+  "cloudModel": {
+    "name": "Egypt-First Sovereign Hybrid Cloud",
+    "sovereignLayer": [
+      "KYC records and identity documents",
+      "KYB documents and legal licences",
+      "WORM audit logs",
+      "encryption keys",
+      "government and regulated records"
+    ],
+    "hybridLayer": [
+      "user interface and public indexes",
+      "tokenized search and matching workloads",
+      "non-sensitive operational orchestration"
+    ],
+    "governance": [
+      "Egyptian data residency",
+      "NTRA-aligned hosting and cloud controls",
+      "server-side RBAC and ABAC enforcement",
+      "immutable auditability"
+    ]
+  },
+  "architectureSections": [
+    {"id": 1, "title": "KYC", "category": "Core Flow", "summary": "التحقق من الهوية الشخصية قبل إنشاء أي ملف تعريفي أو صلاحية تجارية."},
+    {"id": 2, "title": "KYB", "category": "Core Flow", "summary": "التحقق من الشركات والأنشطة والجهات الحكومية بعد نجاح KYC للممثل المفوض."},
+    {"id": 3, "title": "Business & Government Identities", "category": "Core Flow", "summary": "كيانات مستقلة يمكن أن يرتبط بها مستخدم واحد عبر عضويات متعددة."},
+    {"id": 4, "title": "Roles & Permissions", "category": "Core Flow", "summary": "نموذج RBAC + ABAC للأدوار والتفويضات والقيود السياقية."},
+    {"id": 5, "title": "Products, Services, Assets & Demand", "category": "Marketplace & Engine", "summary": "شبكة تجارة تشمل المنتجات والخدمات والأصول المستخدمة وطلبات الاحتياج."},
+    {"id": 6, "title": "Product & Service Identity & Verification", "category": "Marketplace & Engine", "summary": "دورة تحقق مستقلة لكل منتج أو خدمة أو أصل، ولا تكفي حالة KYB وحدها."},
+    {"id": 7, "title": "Trade Matching Engine", "category": "Marketplace & Engine", "summary": "مطابقة متعددة الأبعاد تشمل الهوية والجغرافيا والسعة والشهادات وSLA والتسعير."},
+    {"id": 8, "title": "Data Visibility Matrix", "category": "Security & Governance", "summary": "تحديد البيانات التي يراها كل طرف وفق العلاقة ومستوى الوصول."},
+    {"id": 9, "title": "Immutable Audit Logs & WORM", "category": "Security & Governance", "summary": "تسجيل العمليات الحساسة في سجل غير قابل للتعديل أو الحذف."},
+    {"id": 10, "title": "Market & Government Intelligence", "category": "Intelligence & Data", "summary": "مؤشرات مجمعة للسوق والجهات الحكومية دون كشف البيانات الفردية."},
+    {"id": 11, "title": "Factory Workflow", "category": "Core Flow", "summary": "دورة حياة الإنتاج والتوريد الصناعي."},
+    {"id": 12, "title": "Buyer Workflow", "category": "Core Flow", "summary": "دورة طلب الشراء والتقييم والتعاقد."},
+    {"id": 13, "title": "Store & Consumer", "category": "Marketplace & Engine", "summary": "قواعد التفاعل بين المستهلكين والمتاجر."},
+    {"id": 14, "title": "Importer & Exporter", "category": "Marketplace & Engine", "summary": "إدارة سلاسل الاستيراد والتصدير عبر الحدود."},
+    {"id": 15, "title": "Marketplace Architecture", "category": "Marketplace & Engine", "summary": "تشغيل السوق التجاري متعدد الأنماط."},
+    {"id": 16, "title": "Government Intelligence", "category": "Intelligence & Data", "summary": "لوحات التحكم الحكومية والتنافسية."},
+    {"id": 17, "title": "Database & ERD Requirements", "category": "Security & Governance", "summary": "العلاقات والقيود الأساسية بين طبقات الهوية والكيان والعرض والمطابقة."},
+    {"id": 18, "title": "API Architecture", "category": "Security & Governance", "summary": "واجهات JSON آمنة مرتبطة بالتحقق والصلاحيات."},
+    {"id": 19, "title": "Security & Cryptography", "category": "Security & Governance", "summary": "التشفير والتجزئة والتوقيع وسجلات WORM."},
+    {"id": 20, "title": "UI/UX Standards", "category": "Security & Governance", "summary": "تجربة استكشاف وتصفية ومشاركة للمواصفة والرسوم."},
+    {"id": 21, "title": "Executive Dashboards", "category": "Intelligence & Data", "summary": "لوحات للمستثمرين وصناع القرار والمؤشرات المجمعة."},
+    {"id": 22, "title": "Notifications & Messaging", "category": "Security & Governance", "summary": "تنبيهات موحدة للهوية والتحقق والعقود والأمن."},
+    {"id": 23, "title": "Dispute & Compliance Management", "category": "Security & Governance", "summary": "إدارة الأدلة والوساطة والقرارات والتصدير الموثق."},
+    {"id": 24, "title": "Egypt-First Sovereign Hybrid Cloud", "category": "Security & Governance", "summary": "فصل البيانات السيادية عن طبقة التشغيل الهجينة."},
+    {"id": 25, "title": "MVP vs Phase 2 & 3 Roadmap", "category": "Intelligence & Data", "summary": "خارطة طريق التطوير والتوسع المرحلي."}
+  ],
+  "entities": {
+    "USER": {"layer": "Identity & KYC", "description": "الهوية الأساسية للفرد", "primaryKey": "id", "foreignKeys": []},
+    "KYC_RECORD": {"layer": "Identity & KYC", "description": "سجل التحقق الشخصي والوثائق المشفرة", "primaryKey": "id", "foreignKeys": ["user_id"]},
+    "BUSINESS_ENTITY": {"layer": "Business Entity", "description": "شركة أو مصنع أو نشاط تجاري مستقل", "primaryKey": "id", "foreignKeys": []},
+    "GOVERNMENT_ENTITY": {"layer": "Government Entity", "description": "وزارة أو هيئة حكومية مستقلة لنمط B2G", "primaryKey": "id", "foreignKeys": []},
+    "BUSINESS_MEMBERSHIP": {"layer": "Roles & Permissions", "description": "ربط المستخدم بالكيان والدور", "primaryKey": "id", "foreignKeys": ["user_id", "business_id"]},
+    "TRADE_RELATIONSHIP": {"layer": "Trade Models", "description": "العلاقة التجارية ونطاق الوصول بين الأطراف", "primaryKey": "id", "foreignKeys": ["seller_entity_id", "buyer_entity_id"]},
+    "PRODUCT": {"layer": "Product Identity", "description": "منتج مرتبط بكيان موثق", "primaryKey": "id", "foreignKeys": ["business_id"]},
+    "SERVICE": {"layer": "Service Identity", "description": "قدرة أو خدمة يقدمها كيان موثق", "primaryKey": "id", "foreignKeys": ["business_id"]},
+    "USED_ASSET": {"layer": "Asset Identity", "description": "أصل مستخدم قابل للعرض والتحقق", "primaryKey": "id", "foreignKeys": ["business_id"]},
+    "DEMAND": {"layer": "Demand & Matching", "description": "طلب احتياج لمنتج أو خدمة أو أصل", "primaryKey": "id", "foreignKeys": ["requester_id"]},
+    "MATCH": {"layer": "Purchase & Matching", "description": "نتيجة المطابقة الواعية بالعلاقة والأهلية", "primaryKey": "id", "foreignKeys": ["demand_id", "target_id", "trade_relationship_id"]},
+    "AUDIT_LOG": {"layer": "Audit & Security", "description": "سجل WORM غير قابل للتعديل", "primaryKey": "id", "foreignKeys": ["actor_id"]}
+  },
+  "relationships": [
+    {"from": "USER", "to": "KYC_RECORD", "cardinality": "1:N", "name": "owns identity verification"},
+    {"from": "USER", "to": "BUSINESS_MEMBERSHIP", "cardinality": "1:N", "name": "represents"},
+    {"from": "BUSINESS_ENTITY", "to": "BUSINESS_MEMBERSHIP", "cardinality": "1:N", "name": "has members"},
+    {"from": "BUSINESS_ENTITY", "to": "PRODUCT", "cardinality": "1:N", "name": "owns"},
+    {"from": "BUSINESS_ENTITY", "to": "SERVICE", "cardinality": "1:N", "name": "provides"},
+    {"from": "BUSINESS_ENTITY", "to": "USED_ASSET", "cardinality": "1:N", "name": "lists"},
+    {"from": "DEMAND", "to": "MATCH", "cardinality": "1:N", "name": "generates"},
+    {"from": "TRADE_RELATIONSHIP", "to": "MATCH", "cardinality": "1:N", "name": "constrains eligibility"},
+    {"from": "USER", "to": "AUDIT_LOG", "cardinality": "1:N", "name": "performs"}
+  ],
+  "nonNegotiableRules": [
+    "KYC must be VERIFIED before commercial identity or membership activation.",
+    "KYB must be VERIFIED before B2B or B2G commercial access.",
+    "Product, service, and asset verification are independent from KYB.",
+    "Matching must evaluate relationship, geography, capacity, certification, SLA, and eligibility.",
+    "Sensitive actions require server-side RBAC + ABAC checks and WORM audit records.",
+    "Public, verified, restricted, and confidential data must not be mixed in one visibility scope."
+  ],
+  "sourceArtifacts": {
+    "markdown": "COME_IN_IT_Master_Specification_2026.md",
+    "pdf": "COME_IN_IT_Master_Specification_2026.pdf",
+    "mermaid": "COME_IN_IT_Baseline_V1_0.mmd",
+    "erdReference": "erd-diagram.md",
+    "uiDataSources": ["client/src/data/specData.ts", "client/src/data/architectureDocs.ts", "client/src/data/apiDocsData.ts"]
+  }
+}

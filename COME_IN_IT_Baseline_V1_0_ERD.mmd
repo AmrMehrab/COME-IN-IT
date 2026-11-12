@@ -1,0 +1,211 @@
+%% COME IN IT — Baseline V1.0 ERD
+%% Governing sequence: KYC -> KYB -> Identity -> Roles -> Permissions -> Offerings -> Matching -> Trade -> Audit -> Intelligence
+erDiagram
+    USER ||--o{ KYC_RECORD : verifies
+    USER ||--o{ BUSINESS_MEMBERSHIP : represents
+    USER ||--o{ AUDIT_LOG : performs
+
+    KYC_RECORD {
+        uuid id PK
+        uuid user_id FK
+        enum status
+        char national_id_hash
+        jsonb document_urls
+        timestamptz verified_at
+    }
+
+    BUSINESS_ENTITY ||--o{ BUSINESS_MEMBERSHIP : has
+    BUSINESS_ENTITY ||--o{ PRODUCT : owns
+    BUSINESS_ENTITY ||--o{ SERVICE : provides
+    BUSINESS_ENTITY ||--o{ USED_ASSET : lists
+    BUSINESS_ENTITY ||--o{ TRADE_RELATIONSHIP : participates
+    BUSINESS_ENTITY ||--o{ BUSINESS_VERIFICATION : undergoes
+
+    GOVERNMENT_ENTITY ||--o{ TRADE_RELATIONSHIP : participates
+    GOVERNMENT_ENTITY ||--o{ DEMAND : issues
+
+    BUSINESS_MEMBERSHIP }o--|| USER : links
+    BUSINESS_MEMBERSHIP }o--|| BUSINESS_ENTITY : belongs_to
+    BUSINESS_MEMBERSHIP }o--|| BUSINESS_ROLE : assigned
+    BUSINESS_ROLE ||--o{ ROLE_PERMISSION : grants
+    ROLE_PERMISSION }o--|| PERMISSION : includes
+
+    BUSINESS_ENTITY {
+        uuid id PK
+        varchar legal_name
+        varchar commercial_register
+        varchar tax_id
+        enum entity_type
+        enum kyb_status
+    }
+
+    GOVERNMENT_ENTITY {
+        uuid id PK
+        varchar entity_name
+        varchar gov_id_code
+        boolean procurement_authority
+        enum verification_status
+    }
+
+    BUSINESS_VERIFICATION {
+        uuid id PK
+        uuid business_id FK
+        enum kyb_status
+        timestamptz verified_at
+        date expiry_date
+        varchar reviewer_id
+    }
+
+    BUSINESS_MEMBERSHIP {
+        uuid id PK
+        uuid user_id FK
+        uuid business_id FK
+        uuid role_id FK
+        enum status
+        jsonb attributes
+    }
+
+    BUSINESS_ROLE {
+        uuid id PK
+        varchar role_name
+        boolean is_active
+    }
+
+    ROLE_PERMISSION {
+        uuid id PK
+        uuid role_id FK
+        uuid permission_id FK
+    }
+
+    PERMISSION {
+        uuid id PK
+        varchar permission_name
+        varchar access_scope
+        boolean is_active
+    }
+
+    TRADE_RELATIONSHIP ||--o{ MATCH : governs
+    TRADE_RELATIONSHIP ||--o{ CONTRACT : enables
+    TRADE_RELATIONSHIP {
+        uuid id PK
+        uuid seller_entity_id FK
+        uuid buyer_entity_id FK
+        enum business_model
+        jsonb access_scope
+        enum status
+    }
+
+    PRODUCT ||--o{ PRODUCT_VERIFICATION : requires
+    PRODUCT ||--o{ DEMAND : satisfies
+    SERVICE ||--o{ SERVICE_VERIFICATION : requires
+    SERVICE ||--o{ DEMAND : satisfies
+    USED_ASSET ||--o{ ASSET_VERIFICATION : requires
+    USED_ASSET ||--o{ DEMAND : satisfies
+
+    PRODUCT {
+        uuid id PK
+        uuid business_id FK
+        varchar name
+        varchar hs_code
+        enum verification_status
+    }
+
+    SERVICE {
+        uuid id PK
+        uuid business_id FK
+        varchar service_name
+        jsonb coverage_area
+        jsonb sla
+        enum verification_status
+    }
+
+    USED_ASSET {
+        uuid id PK
+        uuid business_id FK
+        varchar asset_type
+        varchar condition_grade
+        decimal asking_price
+        enum verification_status
+    }
+
+    PRODUCT_VERIFICATION {
+        uuid id PK
+        uuid product_id FK
+        enum status
+        timestamptz verified_at
+        varchar rejection_reason
+    }
+
+    SERVICE_VERIFICATION {
+        uuid id PK
+        uuid service_id FK
+        enum status
+        timestamptz verified_at
+        varchar reviewer_id
+    }
+
+    ASSET_VERIFICATION {
+        uuid id PK
+        uuid asset_id FK
+        enum status
+        timestamptz verified_at
+        varchar evidence_hash
+    }
+
+    DEMAND ||--o{ MATCH : generates
+    DEMAND {
+        uuid id PK
+        uuid requester_id FK
+        enum demand_type
+        varchar geography
+        decimal quantity
+        jsonb requirements
+        enum status
+    }
+
+    MATCH {
+        uuid id PK
+        uuid demand_id FK
+        uuid target_id FK
+        uuid trade_relationship_id FK
+        decimal eligibility_score
+        jsonb match_reasons
+        enum status
+    }
+
+    CONTRACT ||--o{ AUDIT_LOG : records
+    CONTRACT ||--o{ DISPUTE : may_open
+    CONTRACT {
+        uuid id PK
+        uuid trade_relationship_id FK
+        varchar contract_hash
+        enum status
+        date valid_until
+        enum classification
+    }
+
+    DISPUTE ||--o{ EVIDENCE : contains
+    DISPUTE {
+        uuid id PK
+        uuid contract_id FK
+        varchar dispute_type
+        enum status
+        varchar decision_hash
+    }
+
+    EVIDENCE {
+        uuid id PK
+        uuid dispute_id FK
+        varchar evidence_hash
+        enum classification
+        timestamptz submitted_at
+    }
+
+    AUDIT_LOG {
+        uuid id PK
+        uuid actor_id FK
+        varchar action_type
+        varchar immutable_hash
+        timestamptz created_at
+        enum retention_class
+    }

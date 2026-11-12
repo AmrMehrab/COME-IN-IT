@@ -1,0 +1,84 @@
+erDiagram
+    PERSON ||--o| HEALTH_PROFILE : owns
+    HEALTH_PROFILE ||--o{ CONSENT_GRANT : grants
+    HEALTH_PROFILE ||--o{ HEALTH_RECORD_REFERENCE : references
+    HEALTH_PROVIDER ||--o{ HEALTH_RECORD_REFERENCE : source
+    HEALTH_RECORD_REFERENCE ||--o{ HEALTH_RECORD_REFERENCE : amends
+    HEALTH_PROVIDER ||--o{ HEALTH_PROVIDER_VERIFICATION : verifies
+    HEALTH_PROVIDER ||--o{ HEALTH_ROLE_ASSIGNMENT : assigns
+    PERSON ||--o{ HEALTH_ROLE_ASSIGNMENT : holds
+    HEALTH_PROVIDER ||--o{ CONSENT_GRANT : beneficiary
+    HEALTH_PROVIDER ||--o{ HEALTH_ACCESS_LOG : acts
+    HEALTH_PROFILE ||--o{ HEALTH_ACCESS_LOG : targets
+    HEALTH_PROVIDER ||--o{ EMERGENCY_ACCESS_REQUEST : requests
+    HEALTH_PROFILE ||--o{ EMERGENCY_ACCESS_REQUEST : protects
+    CONSENT_GRANT ||--o{ HEALTH_ACCESS_LOG : authorizes
+
+    PERSON {
+      uuid id PK
+      string kyc_status
+    }
+    HEALTH_PROFILE {
+      uuid id PK
+      uuid person_id FK
+      string status
+      string health_id_alias
+      string policy_region
+    }
+    HEALTH_PROVIDER {
+      uuid id PK
+      string provider_type
+      string verification_status
+      string licence_reference_hash
+    }
+    HEALTH_PROVIDER_VERIFICATION {
+      uuid id PK
+      uuid provider_id FK
+      string status
+      date expires_at
+    }
+    HEALTH_ROLE_ASSIGNMENT {
+      uuid id PK
+      uuid provider_id FK
+      uuid person_id FK
+      string health_role
+      string status
+    }
+    CONSENT_GRANT {
+      uuid id PK
+      uuid health_profile_id FK
+      uuid provider_id FK
+      string purpose
+      json scope
+      datetime expires_at
+      string status
+    }
+    HEALTH_RECORD_REFERENCE {
+      uuid id PK
+      uuid health_profile_id FK
+      uuid source_provider_id FK
+      uuid amends_record_id FK
+      string source_type
+      string external_reference_hash
+      string integrity_hash
+      datetime occurred_at
+      string provenance_status
+      datetime submitted_at
+    }
+    HEALTH_ACCESS_LOG {
+      uuid id PK
+      uuid health_profile_id FK
+      uuid provider_id FK
+      uuid consent_grant_id FK
+      string purpose
+      string decision
+      string immutable_hash
+    }
+    EMERGENCY_ACCESS_REQUEST {
+      uuid id PK
+      uuid health_profile_id FK
+      uuid provider_id FK
+      string reason_code
+      datetime expires_at
+      string status
+    }

@@ -1,0 +1,32 @@
+{
+  "domain": "COME_IN_IT_HEALTH",
+  "phase": "PHASE_2",
+  "status": "CONTROLLED_METADATA_FOUNDATION_ACTIVE_APPROVED_WITH_CONDITIONS",
+  "boundary": {
+    "relationalCoreReferences": ["PERSON"],
+    "identityPrerequisite": "KYC-verified PERSON is evaluated as an eligibility gate; VERIFIED_IDENTITY is not a Healthcare foreign-key target.",
+    "auditBoundary": "Healthcare maintains its own access log. A generic WORM event may be emitted without a foreign key to the commercial audit table.",
+    "forbiddenAutomaticLinks": ["PRODUCT", "SERVICE", "USED_ASSET", "DEMAND", "MATCH", "OFFER", "CONTRACT", "ORDER", "TRANSACTION", "TRADE_INTELLIGENCE"],
+    "principle": "one verified identity, multiple trusted domains, user-controlled data, purpose-bound access, full audit"
+  },
+  "healthEntities": [
+    {"id": "HEALTH_PROFILE", "owner": "PERSON", "status": ["PENDING_KYC", "ACTIVE", "SUSPENDED", "CLOSED"], "classification": "CONFIDENTIAL_SOVEREIGN"},
+    {"id": "HEALTH_PROVIDER", "owner": "PROVIDER_ENTITY", "status": ["DRAFT", "PENDING_VERIFICATION", "VERIFIED", "SUSPENDED", "EXPIRED"], "classification": "RESTRICTED"},
+    {"id": "HEALTH_PROVIDER_VERIFICATION", "owner": "COMPLIANCE", "status": ["DRAFT", "SUBMITTED", "UNDER_REVIEW", "VERIFIED", "REJECTED", "SUSPENDED", "EXPIRED"], "classification": "CONFIDENTIAL_SOVEREIGN"},
+    {"id": "HEALTH_ROLE_ASSIGNMENT", "owner": "HEALTH_PROVIDER", "status": ["ACTIVE", "SUSPENDED", "REVOKED", "EXPIRED"], "classification": "RESTRICTED"},
+    {"id": "CONSENT_GRANT", "owner": "HEALTH_PROFILE", "status": ["DRAFT", "ACTIVE", "REVOKED", "EXPIRED"], "classification": "CONFIDENTIAL_SOVEREIGN"},
+    {"id": "HEALTH_RECORD_REFERENCE", "owner": "HEALTH_PROFILE", "status": ["SUBMITTED", "VERIFIED", "REJECTED", "SUPERSEDED"], "classification": "HIGHLY_SENSITIVE_HEALTH", "storedAttributes": ["source_type", "external_reference_hash", "integrity_hash", "occurred_at", "provenance_status", "amends_record_id"]},
+    {"id": "HEALTH_ACCESS_LOG", "owner": "AUDIT", "status": ["SEALED"], "classification": "CONFIDENTIAL_SOVEREIGN"},
+    {"id": "EMERGENCY_ACCESS_REQUEST", "owner": "HEALTH_PROVIDER", "status": ["REQUESTED", "GRANTED", "REJECTED", "EXPIRED", "REVIEWED"], "classification": "CONFIDENTIAL_SOVEREIGN"}
+  ],
+  "accessDecision": {
+    "allowWhen": ["health_profile_active", "provider_verified", "health_role_active", "purpose_allowed", "consent_scope_sufficient", "consent_not_expired"],
+    "emergencyException": ["provider_verified", "health_role_active", "emergency_reason", "time_boxed_grant", "immutable_audit", "post_event_review"]
+  },
+  "dataHandling": {
+    "healthRecordContent": "external_or_sovereign_specialised_store_not_in_commercial_database",
+    "storedInPlatform": ["external_reference_hash", "integrity_hash", "source_type", "occurred_at", "provenance_status", "consent_and_audit_metadata"],
+    "prohibited": ["commercial_profiling", "targeted_ads", "trade_matching_input", "unauthorised_export"]
+  },
+  "workflowFamily": ["WF-H-001 Health ID", "WF-H-002 Provider Onboarding", "WF-H-003 Provider Verification", "WF-H-004 Health Role", "WF-H-005 Consent Grant", "WF-H-006 Consent Revoke", "WF-H-007 Purpose-Bound Access", "WF-H-008 Emergency Access", "WF-H-009 Emergency Review", "WF-H-010 Record Reference", "WF-H-011 Audit Review", "WF-H-012 Account Closure"]
+}

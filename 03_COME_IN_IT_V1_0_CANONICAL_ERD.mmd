@@ -1,0 +1,405 @@
+%% COME IN IT — Canonical V1.0 ERD after Architecture Reconciliation
+%% Canonical rule: Person -> KYC -> Verified Identity -> Entity -> KYB -> Membership -> Role -> Permission -> Offering -> Verification -> Matching -> Trade -> Audit
+%% Healthcare boundary (D-008): Clinical and consent records are intentionally modelled in COME_IN_IT_HEALTH_ERD.mmd.
+%% Its sole cross-domain reference is PERSON; it introduces no foreign keys to BUSINESS_ENTITY, offering, matching, contract, order, transaction, dispute, or trade audit entities.
+%% Operational foundation (implemented): individual_activity_profiles and business_activity_verifications govern a verified source before trade_offerings, trade_demands and trade_matches realise Offering → Demand → Match across B2B/B2C/C2B/C2C. The relationship evaluator records allow, deny, or manual_review; B2G remains out of the operational scope. See COME_IN_IT_TRADE_OPERATIONS_FOUNDATION.md and COME_IN_IT_COMMERCIAL_CAPABILITIES_RECONCILIATION.md.
+erDiagram
+    PERSON ||--|| USER_ACCOUNT : owns
+    PERSON ||--o{ KYC_RECORD : submits
+    KYC_RECORD ||--o| VERIFIED_IDENTITY : produces
+    PERSON ||--o{ BUSINESS_MEMBERSHIP : holds
+    BUSINESS_ENTITY ||--o{ BUSINESS_MEMBERSHIP : authorizes
+    BUSINESS_ENTITY ||--o{ KYB_RECORD : undergoes
+    PERSON ||--o{ INDIVIDUAL_ACTIVITY_PROFILE : declares
+    BUSINESS_ENTITY ||--o{ BUSINESS_ACTIVITY_VERIFICATION : proves
+    BUSINESS_ENTITY ||--o{ TRADE_OFFERING : supplies
+    INDIVIDUAL_ACTIVITY_PROFILE ||--o{ TRADE_OFFERING : supplies
+    BUSINESS_ENTITY ||--o{ TRADE_DEMAND : requests
+    INDIVIDUAL_ACTIVITY_PROFILE ||--o{ TRADE_DEMAND : requests
+    TRADE_DEMAND ||--o{ TRADE_MATCH : evaluates
+    TRADE_OFFERING ||--o{ TRADE_MATCH : evaluates
+    GOVERNMENT_ENTITY ||--o{ GOVERNMENT_PROCUREMENT : issues
+    BUSINESS_MEMBERSHIP }o--|| ROLE : receives
+    ROLE ||--o{ ROLE_PERMISSION : grants
+    PERMISSION ||--o{ ROLE_PERMISSION : included_in
+
+    PERSON {
+        uuid id PK
+        varchar full_name
+        char country_code
+        timestamptz created_at
+    }
+    USER_ACCOUNT {
+        uuid id PK
+        uuid person_id FK
+        varchar auth_subject UK
+        enum status
+    }
+    KYC_RECORD {
+        uuid id PK
+        uuid person_id FK
+        enum status
+        varchar document_hash
+        timestamptz verified_at
+    }
+    VERIFIED_IDENTITY {
+        uuid id PK
+        uuid person_id FK
+        uuid kyc_record_id FK
+        enum assurance_level
+        enum status
+    }
+    BUSINESS_ENTITY {
+        uuid id PK
+        varchar legal_name
+        enum entity_type
+        enum kyb_status
+        enum status
+    }
+    GOVERNMENT_ENTITY {
+        uuid id PK
+        varchar official_name
+        varchar government_code UK
+        json procurement_scope
+        enum status
+    }
+    KYB_RECORD {
+        uuid id PK
+        uuid entity_id FK
+        uuid representative_id FK
+        enum status
+        varchar licence_hash
+        date expiry_date
+    }
+    BUSINESS_MEMBERSHIP {
+        uuid id PK
+        uuid person_id FK
+        uuid entity_id FK
+        uuid role_id FK
+        json scope
+        enum status
+    }
+    INDIVIDUAL_ACTIVITY_PROFILE {
+        bigint id PK
+        uuid person_id FK
+        enum activity_type
+        enum verification_status
+        json capabilities_metadata
+        varchar evidence_reference
+    }
+    BUSINESS_ACTIVITY_VERIFICATION {
+        bigint id PK
+        uuid business_id FK
+        enum activity_type
+        enum verification_status
+        varchar evidence_reference
+        timestamptz expires_at
+    }
+    TRADE_OFFERING {
+        bigint id PK
+        uuid business_id FK
+        bigint individual_profile_id FK
+        enum supplier_kind
+        enum offering_type
+        enum verification_status
+        enum lifecycle_status
+    }
+    TRADE_DEMAND {
+        bigint id PK
+        uuid requester_business_id FK
+        bigint requester_individual_profile_id FK
+        enum requester_kind
+        enum demand_type
+        enum status
+    }
+    TRADE_MATCH {
+        bigint id PK
+        bigint demand_id FK
+        bigint offering_id FK
+        enum relationship_mode
+        enum status
+        varchar decision_reason
+        int score
+    }
+    ROLE {
+        uuid id PK
+        varchar name UK
+        enum scope
+        enum status
+    }
+    PERMISSION {
+        uuid id PK
+        varchar action UK
+        varchar resource
+        enum sensitivity
+        enum status
+    }
+    ROLE_PERMISSION {
+        uuid role_id FK
+        uuid permission_id FK
+        json conditions
+    }
+    PRODUCT {
+        uuid id PK
+        uuid owner_entity_id FK
+        varchar name
+        varchar hs_code
+        enum status
+    }
+    PRODUCT_VERIFICATION {
+        uuid id PK
+        uuid product_id FK
+        uuid reviewer_id FK
+        enum status
+        varchar evidence_hash
+    }
+    SERVICE {
+        uuid id PK
+        uuid owner_entity_id FK
+        varchar service_type
+        json coverage_area
+        json sla
+        enum status
+    }
+    SERVICE_VERIFICATION {
+        uuid id PK
+        uuid service_id FK
+        uuid reviewer_id FK
+        enum status
+        varchar evidence_hash
+    }
+    USED_ASSET {
+        uuid id PK
+        uuid owner_person_id FK
+        uuid owner_entity_id FK
+        varchar asset_type
+        varchar condition_grade
+        enum status
+    }
+    ASSET_VERIFICATION {
+        uuid id PK
+        uuid asset_id FK
+        enum status
+        varchar evidence_hash
+    }
+    DEMAND {
+        uuid id PK
+        uuid requester_id FK
+        enum demand_type
+        json geography
+        json requirements
+        enum status
+    }
+    TRADE_RELATIONSHIP {
+        uuid id PK
+        uuid party_a_id FK
+        uuid party_b_id FK
+        enum business_model
+        json access_scope
+        enum status
+    }
+    MATCH {
+        uuid id PK
+        uuid demand_id FK
+        uuid target_offering_id FK
+        uuid relationship_id FK
+        decimal score
+        enum status
+    }
+    OFFER {
+        uuid id PK
+        uuid match_id FK
+        uuid issuer_id FK
+        json terms
+        enum status
+    }
+    NEGOTIATION {
+        uuid id PK
+        uuid offer_id FK
+        int version
+        json participants
+        enum status
+    }
+    CONTRACT {
+        uuid id PK
+        uuid relationship_id FK
+        varchar contract_hash
+        enum classification
+        enum status
+    }
+    ORDER {
+        uuid id PK
+        uuid contract_id FK
+        uuid buyer_id FK
+        uuid seller_id FK
+        enum status
+    }
+    TRANSACTION {
+        uuid id PK
+        uuid order_id FK
+        decimal amount_reference
+        timestamptz completed_at
+        enum status
+    }
+    GOVERNMENT_PROCUREMENT {
+        uuid id PK
+        uuid government_entity_id FK
+        uuid demand_id FK
+        json procurement_scope
+        enum status
+    }
+    DISPUTE {
+        uuid id PK
+        uuid contract_id FK
+        uuid transaction_id FK
+        enum dispute_type
+        enum status
+    }
+    EVIDENCE {
+        uuid id PK
+        uuid dispute_id FK
+        uuid submitted_by FK
+        varchar evidence_hash
+        enum classification
+    }
+    AUDIT_LOG {
+        uuid id PK
+        uuid actor_id FK
+        varchar event_type
+        varchar immutable_hash
+        timestamptz created_at
+        enum retention_class
+    }
+    COMPLIANCE_CERTIFICATE {
+        uuid id PK
+        uuid subject_entity_id FK
+        json scope
+        varchar certificate_hash
+        date expires_at
+        enum status
+    }
+    NOTIFICATION {
+        uuid id PK
+        uuid recipient_id FK
+        varchar event_type
+        enum severity
+        enum status
+    }
+
+    BUSINESS_ENTITY ||--o{ PRODUCT : owns
+    PRODUCT ||--o{ PRODUCT_VERIFICATION : requires
+    BUSINESS_ENTITY ||--o{ SERVICE : provides
+    SERVICE ||--o{ SERVICE_VERIFICATION : requires
+    BUSINESS_ENTITY ||--o{ USED_ASSET : lists
+    PERSON ||--o{ USED_ASSET : owns
+    USED_ASSET ||--o{ ASSET_VERIFICATION : requires
+    PERSON ||--o{ DEMAND : creates
+    BUSINESS_ENTITY ||--o{ DEMAND : creates
+    DEMAND ||--o{ MATCH : generates
+    TRADE_RELATIONSHIP ||--o{ MATCH : constrains
+    MATCH ||--o{ OFFER : produces
+    OFFER ||--o{ NEGOTIATION : opens
+    TRADE_RELATIONSHIP ||--o{ CONTRACT : enables
+    CONTRACT ||--o{ ORDER : governs
+    ORDER ||--o{ TRANSACTION : records
+    DEMAND ||--o| GOVERNMENT_PROCUREMENT : supports
+    CONTRACT ||--o{ DISPUTE : may_open
+    TRANSACTION ||--o{ DISPUTE : may_open
+    DISPUTE ||--o{ EVIDENCE : contains
+    PERSON ||--o{ AUDIT_LOG : performs
+    BUSINESS_ENTITY ||--o{ AUDIT_LOG : is_subject_of
+    CONTRACT ||--o{ AUDIT_LOG : records
+    BUSINESS_ENTITY ||--o{ COMPLIANCE_CERTIFICATE : receives
+    PERSON ||--o{ NOTIFICATION : receives
+
+    TRADE_RFQ {
+        int id PK
+        int match_id FK
+        int created_by_user_id FK
+        int requested_quantity
+        varchar quantity_unit
+        json delivery_terms
+        json payment_terms
+        enum status
+        datetime valid_until
+    }
+    TRADE_QUOTATION {
+        int id PK
+        int rfq_id FK
+        int supplier_user_id FK
+        int quantity
+        int unit_price_minor
+        char currency_code
+        int lead_time_days
+        json terms
+        enum status
+    }
+    TRADE_TRANSACTION {
+        int id PK
+        int rfq_id FK
+        int quotation_id FK
+        int match_id FK
+        int offering_id FK
+        int demand_id FK
+        int buyer_business_id FK
+        int seller_business_id FK
+        int owner_business_id FK
+        int custodian_business_id FK
+        int total_price_minor
+        char currency_code
+        enum status
+        enum payment_status
+        datetime accepted_at
+        datetime closed_at
+    }
+    TRANSPORT_JOB {
+        int id PK
+        int transaction_id FK
+        int provider_business_id FK
+        json pickup_location
+        json delivery_location
+        enum status
+        datetime pickup_at
+        datetime delivery_at
+    }
+    TRANSACTION_DELIVERY {
+        int id PK
+        int transaction_id FK
+        int transport_job_id FK
+        int delivered_quantity
+        enum acceptance_status
+        int received_by_user_id FK
+        varchar proof_reference
+        datetime delivered_at
+        datetime received_at
+    }
+    TRANSACTION_EVIDENCE {
+        int id PK
+        int transaction_id FK
+        int created_by_user_id FK
+        enum evidence_type
+        varchar reference
+        json metadata
+    }
+    TRANSACTION_DISPUTE {
+        int id PK
+        int transaction_id FK
+        int filed_by_user_id FK
+        varchar reason
+        enum status
+        varchar resolution
+    }
+
+    TRADE_MATCH ||--o{ TRADE_RFQ : opens
+    TRADE_RFQ ||--o{ TRADE_QUOTATION : receives
+    TRADE_RFQ ||--o| TRADE_TRANSACTION : becomes
+    TRADE_QUOTATION ||--o| TRADE_TRANSACTION : accepted_as
+    TRADE_MATCH ||--o{ TRADE_TRANSACTION : grounds
+    TRADE_OFFERING ||--o{ TRADE_TRANSACTION : supplies
+    TRADE_DEMAND ||--o{ TRADE_TRANSACTION : requests
+    TRADE_TRANSACTION ||--o{ TRANSPORT_JOB : fulfills
+    BUSINESS_ENTITY ||--o{ TRANSPORT_JOB : custodians
+    TRADE_TRANSACTION ||--o{ TRANSACTION_DELIVERY : delivers
+    TRANSPORT_JOB ||--o{ TRANSACTION_DELIVERY : proves
+    TRADE_TRANSACTION ||--o{ TRANSACTION_EVIDENCE : evidences
+    TRADE_TRANSACTION ||--o{ TRANSACTION_DISPUTE : may_open
