@@ -1,0 +1,1 @@
+ALTER TABLE `audit_events` MODIFY COLUMN `dataClassification` enum('public','verified','restricted','confidential_sovereign','highly_sensitive_health') NOT NULL DEFAULT 'verified';

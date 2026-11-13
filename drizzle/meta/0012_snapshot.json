@@ -1,0 +1,4405 @@
+{
+  "version": "5",
+  "dialect": "mysql",
+  "id": "249ad50c-6f51-43dd-941d-eaa1316a89b7",
+  "prevId": "c32b8c1d-540d-46da-b298-816c6bd4b47b",
+  "tables": {
+    "audit_events": {
+      "name": "audit_events",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "actorUserId": {
+          "name": "actorUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "action": {
+          "name": "action",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "resourceType": {
+          "name": "resourceType",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "resourceId": {
+          "name": "resourceId",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "dataClassification": {
+          "name": "dataClassification",
+          "type": "enum('public','verified','restricted','confidential_sovereign','highly_sensitive_health')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'verified'"
+        },
+        "metadataJson": {
+          "name": "metadataJson",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "audit_events_actor_idx": {
+          "name": "audit_events_actor_idx",
+          "columns": [
+            "actorUserId"
+          ],
+          "isUnique": false
+        },
+        "audit_events_resource_idx": {
+          "name": "audit_events_resource_idx",
+          "columns": [
+            "resourceType",
+            "resourceId"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "audit_events_actorUserId_users_id_fk": {
+          "name": "audit_events_actorUserId_users_id_fk",
+          "tableFrom": "audit_events",
+          "tableTo": "users",
+          "columnsFrom": [
+            "actorUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "audit_events_id": {
+          "name": "audit_events_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "biometric_consents": {
+      "name": "biometric_consents",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "personId": {
+          "name": "personId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "consentType": {
+          "name": "consentType",
+          "type": "enum('face_verification','liveness_detection')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('granted','revoked')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'granted'"
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "policyVersion": {
+          "name": "policyVersion",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "consentTextHash": {
+          "name": "consentTextHash",
+          "type": "varchar(128)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "providerReference": {
+          "name": "providerReference",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "grantedAt": {
+          "name": "grantedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "revokedAt": {
+          "name": "revokedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "biometric_consents_person_idx": {
+          "name": "biometric_consents_person_idx",
+          "columns": [
+            "personId"
+          ],
+          "isUnique": false
+        },
+        "biometric_consents_type_status_idx": {
+          "name": "biometric_consents_type_status_idx",
+          "columns": [
+            "consentType",
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "biometric_consents_personId_persons_id_fk": {
+          "name": "biometric_consents_personId_persons_id_fk",
+          "tableFrom": "biometric_consents",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "personId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "biometric_consents_id": {
+          "name": "biometric_consents_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "business_activity_verifications": {
+      "name": "business_activity_verifications",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "businessId": {
+          "name": "businessId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "activityType": {
+          "name": "activityType",
+          "type": "enum('factory','importer','exporter','store','service_provider')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "verificationStatus": {
+          "name": "verificationStatus",
+          "type": "enum('unverified','pending','verified','suspended','expired','rejected')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'unverified'"
+        },
+        "evidenceReference": {
+          "name": "evidenceReference",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reviewedByUserId": {
+          "name": "reviewedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reviewedAt": {
+          "name": "reviewedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "expiresAt": {
+          "name": "expiresAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "business_activity_business_type_unique": {
+          "name": "business_activity_business_type_unique",
+          "columns": [
+            "businessId",
+            "activityType"
+          ],
+          "isUnique": true
+        },
+        "business_activity_status_idx": {
+          "name": "business_activity_status_idx",
+          "columns": [
+            "verificationStatus"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "business_activity_verifications_businessId_business_entities_id_fk": {
+          "name": "business_activity_verifications_businessId_business_entities_id_fk",
+          "tableFrom": "business_activity_verifications",
+          "tableTo": "business_entities",
+          "columnsFrom": [
+            "businessId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "business_activity_verifications_reviewedByUserId_users_id_fk": {
+          "name": "business_activity_verifications_reviewedByUserId_users_id_fk",
+          "tableFrom": "business_activity_verifications",
+          "tableTo": "users",
+          "columnsFrom": [
+            "reviewedByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "business_activity_verifications_id": {
+          "name": "business_activity_verifications_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "business_entities": {
+      "name": "business_entities",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "ownerUserId": {
+          "name": "ownerUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ownerPersonId": {
+          "name": "ownerPersonId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "legalName": {
+          "name": "legalName",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tradeName": {
+          "name": "tradeName",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "registrationNumber": {
+          "name": "registrationNumber",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "entityType": {
+          "name": "entityType",
+          "type": "enum('factory','importer','exporter','store','service_provider','government_entity','other')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "verificationStatus": {
+          "name": "verificationStatus",
+          "type": "enum('unverified','pending','verified','suspended','expired','rejected')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'unverified'"
+        },
+        "dataClassification": {
+          "name": "dataClassification",
+          "type": "enum('public','verified','restricted','confidential_sovereign')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'restricted'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "business_entities_owner_idx": {
+          "name": "business_entities_owner_idx",
+          "columns": [
+            "ownerUserId"
+          ],
+          "isUnique": false
+        },
+        "business_entities_owner_person_idx": {
+          "name": "business_entities_owner_person_idx",
+          "columns": [
+            "ownerPersonId"
+          ],
+          "isUnique": false
+        },
+        "business_entities_registration_unique": {
+          "name": "business_entities_registration_unique",
+          "columns": [
+            "registrationNumber"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "business_entities_ownerUserId_users_id_fk": {
+          "name": "business_entities_ownerUserId_users_id_fk",
+          "tableFrom": "business_entities",
+          "tableTo": "users",
+          "columnsFrom": [
+            "ownerUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "business_entities_ownerPersonId_persons_id_fk": {
+          "name": "business_entities_ownerPersonId_persons_id_fk",
+          "tableFrom": "business_entities",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "ownerPersonId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "business_entities_id": {
+          "name": "business_entities_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "business_memberships": {
+      "name": "business_memberships",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "businessId": {
+          "name": "businessId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "userId": {
+          "name": "userId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "personId": {
+          "name": "personId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "membershipRole": {
+          "name": "membershipRole",
+          "type": "enum('owner','authorized_representative','operations_manager','viewer')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('active','suspended','inactive')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'active'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "business_memberships_business_idx": {
+          "name": "business_memberships_business_idx",
+          "columns": [
+            "businessId"
+          ],
+          "isUnique": false
+        },
+        "business_memberships_user_idx": {
+          "name": "business_memberships_user_idx",
+          "columns": [
+            "userId"
+          ],
+          "isUnique": false
+        },
+        "business_memberships_person_idx": {
+          "name": "business_memberships_person_idx",
+          "columns": [
+            "personId"
+          ],
+          "isUnique": false
+        },
+        "business_memberships_business_user_unique": {
+          "name": "business_memberships_business_user_unique",
+          "columns": [
+            "businessId",
+            "userId"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "business_memberships_businessId_business_entities_id_fk": {
+          "name": "business_memberships_businessId_business_entities_id_fk",
+          "tableFrom": "business_memberships",
+          "tableTo": "business_entities",
+          "columnsFrom": [
+            "businessId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "business_memberships_userId_users_id_fk": {
+          "name": "business_memberships_userId_users_id_fk",
+          "tableFrom": "business_memberships",
+          "tableTo": "users",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "business_memberships_personId_persons_id_fk": {
+          "name": "business_memberships_personId_persons_id_fk",
+          "tableFrom": "business_memberships",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "personId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "business_memberships_id": {
+          "name": "business_memberships_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "commerce_purchase_orders": {
+      "name": "commerce_purchase_orders",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "buyerUserId": {
+          "name": "buyerUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "partnerKey": {
+          "name": "partnerKey",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "partnerName": {
+          "name": "partnerName",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "productKey": {
+          "name": "productKey",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "productName": {
+          "name": "productName",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "category": {
+          "name": "category",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "quantityUnit": {
+          "name": "quantityUnit",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "moq": {
+          "name": "moq",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "unitPriceMinor": {
+          "name": "unitPriceMinor",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "currencyCode": {
+          "name": "currencyCode",
+          "type": "varchar(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'EGP'"
+        },
+        "message": {
+          "name": "message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('draft','submitted','acknowledged','cancelled')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'submitted'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "commerce_orders_buyer_idx": {
+          "name": "commerce_orders_buyer_idx",
+          "columns": [
+            "buyerUserId"
+          ],
+          "isUnique": false
+        },
+        "commerce_orders_partner_idx": {
+          "name": "commerce_orders_partner_idx",
+          "columns": [
+            "partnerKey"
+          ],
+          "isUnique": false
+        },
+        "commerce_orders_status_idx": {
+          "name": "commerce_orders_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "commerce_purchase_orders_buyerUserId_users_id_fk": {
+          "name": "commerce_purchase_orders_buyerUserId_users_id_fk",
+          "tableFrom": "commerce_purchase_orders",
+          "tableTo": "users",
+          "columnsFrom": [
+            "buyerUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "commerce_purchase_orders_id": {
+          "name": "commerce_purchase_orders_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "health_access_logs": {
+      "name": "health_access_logs",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "healthProfileId": {
+          "name": "healthProfileId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "providerId": {
+          "name": "providerId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "actorUserId": {
+          "name": "actorUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "consentId": {
+          "name": "consentId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "purposeCode": {
+          "name": "purposeCode",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "requestedScopeHash": {
+          "name": "requestedScopeHash",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "decision": {
+          "name": "decision",
+          "type": "enum('allowed','denied','emergency_allowed')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "denialCode": {
+          "name": "denialCode",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "health_access_logs_profile_idx": {
+          "name": "health_access_logs_profile_idx",
+          "columns": [
+            "healthProfileId"
+          ],
+          "isUnique": false
+        },
+        "health_access_logs_actor_idx": {
+          "name": "health_access_logs_actor_idx",
+          "columns": [
+            "actorUserId"
+          ],
+          "isUnique": false
+        },
+        "health_access_logs_decision_idx": {
+          "name": "health_access_logs_decision_idx",
+          "columns": [
+            "decision"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "health_access_logs_healthProfileId_health_profiles_id_fk": {
+          "name": "health_access_logs_healthProfileId_health_profiles_id_fk",
+          "tableFrom": "health_access_logs",
+          "tableTo": "health_profiles",
+          "columnsFrom": [
+            "healthProfileId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "health_access_logs_providerId_health_providers_id_fk": {
+          "name": "health_access_logs_providerId_health_providers_id_fk",
+          "tableFrom": "health_access_logs",
+          "tableTo": "health_providers",
+          "columnsFrom": [
+            "providerId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "health_access_logs_actorUserId_users_id_fk": {
+          "name": "health_access_logs_actorUserId_users_id_fk",
+          "tableFrom": "health_access_logs",
+          "tableTo": "users",
+          "columnsFrom": [
+            "actorUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "health_access_logs_consentId_health_consents_id_fk": {
+          "name": "health_access_logs_consentId_health_consents_id_fk",
+          "tableFrom": "health_access_logs",
+          "tableTo": "health_consents",
+          "columnsFrom": [
+            "consentId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "health_access_logs_id": {
+          "name": "health_access_logs_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "health_consents": {
+      "name": "health_consents",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "healthProfileId": {
+          "name": "healthProfileId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "beneficiaryProviderId": {
+          "name": "beneficiaryProviderId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "purposeCode": {
+          "name": "purposeCode",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scopeJson": {
+          "name": "scopeJson",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('draft','active','revoked','expired')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'draft'"
+        },
+        "evidenceHash": {
+          "name": "evidenceHash",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "issuedAt": {
+          "name": "issuedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "expiresAt": {
+          "name": "expiresAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "revokedAt": {
+          "name": "revokedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "revocationReason": {
+          "name": "revocationReason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "health_consents_profile_idx": {
+          "name": "health_consents_profile_idx",
+          "columns": [
+            "healthProfileId"
+          ],
+          "isUnique": false
+        },
+        "health_consents_provider_idx": {
+          "name": "health_consents_provider_idx",
+          "columns": [
+            "beneficiaryProviderId"
+          ],
+          "isUnique": false
+        },
+        "health_consents_status_expires_idx": {
+          "name": "health_consents_status_expires_idx",
+          "columns": [
+            "status",
+            "expiresAt"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "health_consents_healthProfileId_health_profiles_id_fk": {
+          "name": "health_consents_healthProfileId_health_profiles_id_fk",
+          "tableFrom": "health_consents",
+          "tableTo": "health_profiles",
+          "columnsFrom": [
+            "healthProfileId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "health_consents_beneficiaryProviderId_health_providers_id_fk": {
+          "name": "health_consents_beneficiaryProviderId_health_providers_id_fk",
+          "tableFrom": "health_consents",
+          "tableTo": "health_providers",
+          "columnsFrom": [
+            "beneficiaryProviderId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "health_consents_id": {
+          "name": "health_consents_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "health_emergency_access_requests": {
+      "name": "health_emergency_access_requests",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "healthProfileId": {
+          "name": "healthProfileId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "providerId": {
+          "name": "providerId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "requesterUserId": {
+          "name": "requesterUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reasonCode": {
+          "name": "reasonCode",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('requested','granted','expired','reviewed','rejected')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'requested'"
+        },
+        "grantedAt": {
+          "name": "grantedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "expiresAt": {
+          "name": "expiresAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reviewedByUserId": {
+          "name": "reviewedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reviewedAt": {
+          "name": "reviewedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reviewNote": {
+          "name": "reviewNote",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "health_emergency_profile_idx": {
+          "name": "health_emergency_profile_idx",
+          "columns": [
+            "healthProfileId"
+          ],
+          "isUnique": false
+        },
+        "health_emergency_requester_idx": {
+          "name": "health_emergency_requester_idx",
+          "columns": [
+            "requesterUserId"
+          ],
+          "isUnique": false
+        },
+        "health_emergency_status_idx": {
+          "name": "health_emergency_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "health_emergency_access_requests_healthProfileId_health_profiles_id_fk": {
+          "name": "health_emergency_access_requests_healthProfileId_health_profiles_id_fk",
+          "tableFrom": "health_emergency_access_requests",
+          "tableTo": "health_profiles",
+          "columnsFrom": [
+            "healthProfileId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "health_emergency_access_requests_providerId_health_providers_id_fk": {
+          "name": "health_emergency_access_requests_providerId_health_providers_id_fk",
+          "tableFrom": "health_emergency_access_requests",
+          "tableTo": "health_providers",
+          "columnsFrom": [
+            "providerId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "health_emergency_access_requests_requesterUserId_users_id_fk": {
+          "name": "health_emergency_access_requests_requesterUserId_users_id_fk",
+          "tableFrom": "health_emergency_access_requests",
+          "tableTo": "users",
+          "columnsFrom": [
+            "requesterUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "health_emergency_access_requests_reviewedByUserId_users_id_fk": {
+          "name": "health_emergency_access_requests_reviewedByUserId_users_id_fk",
+          "tableFrom": "health_emergency_access_requests",
+          "tableTo": "users",
+          "columnsFrom": [
+            "reviewedByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "health_emergency_access_requests_id": {
+          "name": "health_emergency_access_requests_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "health_profiles": {
+      "name": "health_profiles",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "personId": {
+          "name": "personId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('active','suspended','closed')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'active'"
+        },
+        "healthIdentityReference": {
+          "name": "healthIdentityReference",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "dataClassification": {
+          "name": "dataClassification",
+          "type": "enum('confidential_sovereign')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'confidential_sovereign'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "health_profiles_person_unique": {
+          "name": "health_profiles_person_unique",
+          "columns": [
+            "personId"
+          ],
+          "isUnique": true
+        },
+        "health_profiles_reference_unique": {
+          "name": "health_profiles_reference_unique",
+          "columns": [
+            "healthIdentityReference"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "health_profiles_personId_persons_id_fk": {
+          "name": "health_profiles_personId_persons_id_fk",
+          "tableFrom": "health_profiles",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "personId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "health_profiles_id": {
+          "name": "health_profiles_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "health_provider_roles": {
+      "name": "health_provider_roles",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "healthProviderId": {
+          "name": "healthProviderId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "userId": {
+          "name": "userId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "enum('provider_admin','health_professional','emergency_clinician','compliance_reviewer')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('active','suspended','inactive')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'active'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "health_provider_roles_provider_idx": {
+          "name": "health_provider_roles_provider_idx",
+          "columns": [
+            "healthProviderId"
+          ],
+          "isUnique": false
+        },
+        "health_provider_roles_user_idx": {
+          "name": "health_provider_roles_user_idx",
+          "columns": [
+            "userId"
+          ],
+          "isUnique": false
+        },
+        "health_provider_roles_unique": {
+          "name": "health_provider_roles_unique",
+          "columns": [
+            "healthProviderId",
+            "userId",
+            "role"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "health_provider_roles_healthProviderId_health_providers_id_fk": {
+          "name": "health_provider_roles_healthProviderId_health_providers_id_fk",
+          "tableFrom": "health_provider_roles",
+          "tableTo": "health_providers",
+          "columnsFrom": [
+            "healthProviderId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "health_provider_roles_userId_users_id_fk": {
+          "name": "health_provider_roles_userId_users_id_fk",
+          "tableFrom": "health_provider_roles",
+          "tableTo": "users",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "health_provider_roles_id": {
+          "name": "health_provider_roles_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "health_providers": {
+      "name": "health_providers",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "legalName": {
+          "name": "legalName",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "providerType": {
+          "name": "providerType",
+          "type": "enum('hospital','clinic','laboratory','pharmacy','diagnostic_center','emergency_service','other')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "verificationStatus": {
+          "name": "verificationStatus",
+          "type": "enum('unverified','pending','verified','suspended','expired','rejected')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'unverified'"
+        },
+        "licenseReference": {
+          "name": "licenseReference",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "dataClassification": {
+          "name": "dataClassification",
+          "type": "enum('restricted','confidential_sovereign')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'confidential_sovereign'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "health_providers_status_idx": {
+          "name": "health_providers_status_idx",
+          "columns": [
+            "verificationStatus"
+          ],
+          "isUnique": false
+        },
+        "health_providers_license_unique": {
+          "name": "health_providers_license_unique",
+          "columns": [
+            "licenseReference"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "health_providers_id": {
+          "name": "health_providers_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "health_record_references": {
+      "name": "health_record_references",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "healthProfileId": {
+          "name": "healthProfileId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sourceProviderId": {
+          "name": "sourceProviderId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "submittedByUserId": {
+          "name": "submittedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sourceType": {
+          "name": "sourceType",
+          "type": "enum('patient_statement','professional_encounter','laboratory_result','radiology_report','hospital_encounter','medication_dispense','medical_document')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "externalReferenceHash": {
+          "name": "externalReferenceHash",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "integrityHash": {
+          "name": "integrityHash",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provenanceStatus": {
+          "name": "provenanceStatus",
+          "type": "enum('submitted','verified','rejected','superseded')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'submitted'"
+        },
+        "occurredAt": {
+          "name": "occurredAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "submittedAt": {
+          "name": "submittedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "lockedAt": {
+          "name": "lockedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "amendsRecordId": {
+          "name": "amendsRecordId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "amendmentReason": {
+          "name": "amendmentReason",
+          "type": "varchar(240)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "dataClassification": {
+          "name": "dataClassification",
+          "type": "enum('confidential_sovereign','highly_sensitive_health')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'highly_sensitive_health'"
+        }
+      },
+      "indexes": {
+        "health_record_references_profile_idx": {
+          "name": "health_record_references_profile_idx",
+          "columns": [
+            "healthProfileId"
+          ],
+          "isUnique": false
+        },
+        "health_record_references_provider_idx": {
+          "name": "health_record_references_provider_idx",
+          "columns": [
+            "sourceProviderId"
+          ],
+          "isUnique": false
+        },
+        "health_record_references_status_idx": {
+          "name": "health_record_references_status_idx",
+          "columns": [
+            "provenanceStatus"
+          ],
+          "isUnique": false
+        },
+        "health_record_references_amends_idx": {
+          "name": "health_record_references_amends_idx",
+          "columns": [
+            "amendsRecordId"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "health_record_references_healthProfileId_health_profiles_id_fk": {
+          "name": "health_record_references_healthProfileId_health_profiles_id_fk",
+          "tableFrom": "health_record_references",
+          "tableTo": "health_profiles",
+          "columnsFrom": [
+            "healthProfileId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "health_record_references_sourceProviderId_health_providers_id_fk": {
+          "name": "health_record_references_sourceProviderId_health_providers_id_fk",
+          "tableFrom": "health_record_references",
+          "tableTo": "health_providers",
+          "columnsFrom": [
+            "sourceProviderId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "health_record_references_submittedByUserId_users_id_fk": {
+          "name": "health_record_references_submittedByUserId_users_id_fk",
+          "tableFrom": "health_record_references",
+          "tableTo": "users",
+          "columnsFrom": [
+            "submittedByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "health_record_references_amendsRecordId_health_record_references_id_fk": {
+          "name": "health_record_references_amendsRecordId_health_record_references_id_fk",
+          "tableFrom": "health_record_references",
+          "tableTo": "health_record_references",
+          "columnsFrom": [
+            "amendsRecordId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "health_record_references_id": {
+          "name": "health_record_references_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "individual_activity_profiles": {
+      "name": "individual_activity_profiles",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "personId": {
+          "name": "personId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "activityType": {
+          "name": "activityType",
+          "type": "enum('consumer','individual_producer','used_asset_seller','service_provider')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "verificationStatus": {
+          "name": "verificationStatus",
+          "type": "enum('unverified','pending','verified','suspended','expired','rejected')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'unverified'"
+        },
+        "capabilitiesJson": {
+          "name": "capabilitiesJson",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "evidenceReference": {
+          "name": "evidenceReference",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "dataClassification": {
+          "name": "dataClassification",
+          "type": "enum('public','verified','restricted')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'verified'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "individual_activity_person_type_unique": {
+          "name": "individual_activity_person_type_unique",
+          "columns": [
+            "personId",
+            "activityType"
+          ],
+          "isUnique": true
+        },
+        "individual_activity_status_idx": {
+          "name": "individual_activity_status_idx",
+          "columns": [
+            "verificationStatus"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "individual_activity_profiles_personId_persons_id_fk": {
+          "name": "individual_activity_profiles_personId_persons_id_fk",
+          "tableFrom": "individual_activity_profiles",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "personId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "individual_activity_profiles_id": {
+          "name": "individual_activity_profiles_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "kyb_verifications": {
+      "name": "kyb_verifications",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "businessId": {
+          "name": "businessId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "submittedByUserId": {
+          "name": "submittedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('pending','verified','suspended','expired','rejected')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "providerReference": {
+          "name": "providerReference",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "registrationReference": {
+          "name": "registrationReference",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "documentMetadataJson": {
+          "name": "documentMetadataJson",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reviewReason": {
+          "name": "reviewReason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reviewedByUserId": {
+          "name": "reviewedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "submittedAt": {
+          "name": "submittedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "reviewedAt": {
+          "name": "reviewedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "expiresAt": {
+          "name": "expiresAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "kyb_verifications_business_idx": {
+          "name": "kyb_verifications_business_idx",
+          "columns": [
+            "businessId"
+          ],
+          "isUnique": false
+        },
+        "kyb_verifications_submitter_idx": {
+          "name": "kyb_verifications_submitter_idx",
+          "columns": [
+            "submittedByUserId"
+          ],
+          "isUnique": false
+        },
+        "kyb_verifications_status_idx": {
+          "name": "kyb_verifications_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "kyb_verifications_businessId_business_entities_id_fk": {
+          "name": "kyb_verifications_businessId_business_entities_id_fk",
+          "tableFrom": "kyb_verifications",
+          "tableTo": "business_entities",
+          "columnsFrom": [
+            "businessId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "kyb_verifications_submittedByUserId_users_id_fk": {
+          "name": "kyb_verifications_submittedByUserId_users_id_fk",
+          "tableFrom": "kyb_verifications",
+          "tableTo": "users",
+          "columnsFrom": [
+            "submittedByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "kyb_verifications_reviewedByUserId_users_id_fk": {
+          "name": "kyb_verifications_reviewedByUserId_users_id_fk",
+          "tableFrom": "kyb_verifications",
+          "tableTo": "users",
+          "columnsFrom": [
+            "reviewedByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "kyb_verifications_id": {
+          "name": "kyb_verifications_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "kyc_verifications": {
+      "name": "kyc_verifications",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "personId": {
+          "name": "personId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('pending','verified','suspended','expired','rejected')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "providerReference": {
+          "name": "providerReference",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "identityReference": {
+          "name": "identityReference",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "countryCode": {
+          "name": "countryCode",
+          "type": "varchar(2)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "documentMetadataJson": {
+          "name": "documentMetadataJson",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reviewReason": {
+          "name": "reviewReason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reviewedByUserId": {
+          "name": "reviewedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "submittedAt": {
+          "name": "submittedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "reviewedAt": {
+          "name": "reviewedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "expiresAt": {
+          "name": "expiresAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "kyc_verifications_person_idx": {
+          "name": "kyc_verifications_person_idx",
+          "columns": [
+            "personId"
+          ],
+          "isUnique": false
+        },
+        "kyc_verifications_status_idx": {
+          "name": "kyc_verifications_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "kyc_verifications_personId_persons_id_fk": {
+          "name": "kyc_verifications_personId_persons_id_fk",
+          "tableFrom": "kyc_verifications",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "personId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "kyc_verifications_reviewedByUserId_users_id_fk": {
+          "name": "kyc_verifications_reviewedByUserId_users_id_fk",
+          "tableFrom": "kyc_verifications",
+          "tableTo": "users",
+          "columnsFrom": [
+            "reviewedByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "kyc_verifications_id": {
+          "name": "kyc_verifications_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "persons": {
+      "name": "persons",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "userId": {
+          "name": "userId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kycStatus": {
+          "name": "kycStatus",
+          "type": "enum('unverified','pending','verified','suspended','expired','rejected')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'unverified'"
+        },
+        "faceVerificationStatus": {
+          "name": "faceVerificationStatus",
+          "type": "enum('unverified','pending','verified','manual_review','suspended','expired','rejected')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'unverified'"
+        },
+        "livenessStatus": {
+          "name": "livenessStatus",
+          "type": "enum('unverified','pending','passed','manual_review','failed','suspended','expired')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'unverified'"
+        },
+        "biometricConsentStatus": {
+          "name": "biometricConsentStatus",
+          "type": "enum('not_granted','granted','revoked')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'not_granted'"
+        },
+        "biometricProvider": {
+          "name": "biometricProvider",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "faceVerificationReference": {
+          "name": "faceVerificationReference",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "livenessVerificationReference": {
+          "name": "livenessVerificationReference",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "biometricVerifiedAt": {
+          "name": "biometricVerifiedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "dataClassification": {
+          "name": "dataClassification",
+          "type": "enum('public','verified','restricted','confidential_sovereign')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'restricted'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "persons_user_unique": {
+          "name": "persons_user_unique",
+          "columns": [
+            "userId"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "persons_userId_users_id_fk": {
+          "name": "persons_userId_users_id_fk",
+          "tableFrom": "persons",
+          "tableTo": "users",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "persons_id": {
+          "name": "persons_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "specification_bookmarks": {
+      "name": "specification_bookmarks",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "userId": {
+          "name": "userId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sectionId": {
+          "name": "sectionId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "specification_bookmarks_user_idx": {
+          "name": "specification_bookmarks_user_idx",
+          "columns": [
+            "userId"
+          ],
+          "isUnique": false
+        },
+        "specification_bookmarks_user_section_unique": {
+          "name": "specification_bookmarks_user_section_unique",
+          "columns": [
+            "userId",
+            "sectionId"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "specification_bookmarks_userId_users_id_fk": {
+          "name": "specification_bookmarks_userId_users_id_fk",
+          "tableFrom": "specification_bookmarks",
+          "tableTo": "users",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "specification_bookmarks_id": {
+          "name": "specification_bookmarks_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "trade_demands": {
+      "name": "trade_demands",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "requesterBusinessId": {
+          "name": "requesterBusinessId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "requesterIndividualProfileId": {
+          "name": "requesterIndividualProfileId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "requesterKind": {
+          "name": "requesterKind",
+          "type": "enum('business','individual')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'business'"
+        },
+        "createdByUserId": {
+          "name": "createdByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "demandType": {
+          "name": "demandType",
+          "type": "enum('product','service','used_asset')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "geographyJson": {
+          "name": "geographyJson",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "requirementsJson": {
+          "name": "requirementsJson",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('draft','published','matching','fulfilled','cancelled','expired')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'draft'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "trade_demands_requester_idx": {
+          "name": "trade_demands_requester_idx",
+          "columns": [
+            "requesterBusinessId"
+          ],
+          "isUnique": false
+        },
+        "trade_demands_individual_profile_idx": {
+          "name": "trade_demands_individual_profile_idx",
+          "columns": [
+            "requesterIndividualProfileId"
+          ],
+          "isUnique": false
+        },
+        "trade_demands_creator_idx": {
+          "name": "trade_demands_creator_idx",
+          "columns": [
+            "createdByUserId"
+          ],
+          "isUnique": false
+        },
+        "trade_demands_status_idx": {
+          "name": "trade_demands_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "trade_demands_requesterBusinessId_business_entities_id_fk": {
+          "name": "trade_demands_requesterBusinessId_business_entities_id_fk",
+          "tableFrom": "trade_demands",
+          "tableTo": "business_entities",
+          "columnsFrom": [
+            "requesterBusinessId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "trade_demands_requesterIndividualProfileId_individual_activity_profiles_id_fk": {
+          "name": "trade_demands_requesterIndividualProfileId_individual_activity_profiles_id_fk",
+          "tableFrom": "trade_demands",
+          "tableTo": "individual_activity_profiles",
+          "columnsFrom": [
+            "requesterIndividualProfileId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "trade_demands_createdByUserId_users_id_fk": {
+          "name": "trade_demands_createdByUserId_users_id_fk",
+          "tableFrom": "trade_demands",
+          "tableTo": "users",
+          "columnsFrom": [
+            "createdByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "trade_demands_id": {
+          "name": "trade_demands_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "trade_matches": {
+      "name": "trade_matches",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "demandId": {
+          "name": "demandId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "offeringId": {
+          "name": "offeringId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "evaluatedByUserId": {
+          "name": "evaluatedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "score": {
+          "name": "score",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "relationshipMode": {
+          "name": "relationshipMode",
+          "type": "enum('b2b','b2c','c2b','c2c')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'b2b'"
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('candidate','eligible','manual_review','ineligible','declined','expired')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'candidate'"
+        },
+        "decisionReason": {
+          "name": "decisionReason",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "trade_matches_demand_offering_unique": {
+          "name": "trade_matches_demand_offering_unique",
+          "columns": [
+            "demandId",
+            "offeringId"
+          ],
+          "isUnique": true
+        },
+        "trade_matches_demand_idx": {
+          "name": "trade_matches_demand_idx",
+          "columns": [
+            "demandId"
+          ],
+          "isUnique": false
+        },
+        "trade_matches_offering_idx": {
+          "name": "trade_matches_offering_idx",
+          "columns": [
+            "offeringId"
+          ],
+          "isUnique": false
+        },
+        "trade_matches_status_idx": {
+          "name": "trade_matches_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "trade_matches_demandId_trade_demands_id_fk": {
+          "name": "trade_matches_demandId_trade_demands_id_fk",
+          "tableFrom": "trade_matches",
+          "tableTo": "trade_demands",
+          "columnsFrom": [
+            "demandId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "trade_matches_offeringId_trade_offerings_id_fk": {
+          "name": "trade_matches_offeringId_trade_offerings_id_fk",
+          "tableFrom": "trade_matches",
+          "tableTo": "trade_offerings",
+          "columnsFrom": [
+            "offeringId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "trade_matches_evaluatedByUserId_users_id_fk": {
+          "name": "trade_matches_evaluatedByUserId_users_id_fk",
+          "tableFrom": "trade_matches",
+          "tableTo": "users",
+          "columnsFrom": [
+            "evaluatedByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "trade_matches_id": {
+          "name": "trade_matches_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "trade_offerings": {
+      "name": "trade_offerings",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "businessId": {
+          "name": "businessId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "individualProfileId": {
+          "name": "individualProfileId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "supplierKind": {
+          "name": "supplierKind",
+          "type": "enum('business','individual')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'business'"
+        },
+        "createdByUserId": {
+          "name": "createdByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "offeringType": {
+          "name": "offeringType",
+          "type": "enum('product','service','used_asset')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "categoryCode": {
+          "name": "categoryCode",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "descriptionJson": {
+          "name": "descriptionJson",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "dataClassification": {
+          "name": "dataClassification",
+          "type": "enum('public','verified','restricted','confidential_sovereign')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'verified'"
+        },
+        "verificationStatus": {
+          "name": "verificationStatus",
+          "type": "enum('draft','pending','verified','rejected','suspended','expired')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'draft'"
+        },
+        "lifecycleStatus": {
+          "name": "lifecycleStatus",
+          "type": "enum('draft','published','archived')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'draft'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "trade_offerings_business_idx": {
+          "name": "trade_offerings_business_idx",
+          "columns": [
+            "businessId"
+          ],
+          "isUnique": false
+        },
+        "trade_offerings_individual_profile_idx": {
+          "name": "trade_offerings_individual_profile_idx",
+          "columns": [
+            "individualProfileId"
+          ],
+          "isUnique": false
+        },
+        "trade_offerings_creator_idx": {
+          "name": "trade_offerings_creator_idx",
+          "columns": [
+            "createdByUserId"
+          ],
+          "isUnique": false
+        },
+        "trade_offerings_verification_idx": {
+          "name": "trade_offerings_verification_idx",
+          "columns": [
+            "verificationStatus"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "trade_offerings_businessId_business_entities_id_fk": {
+          "name": "trade_offerings_businessId_business_entities_id_fk",
+          "tableFrom": "trade_offerings",
+          "tableTo": "business_entities",
+          "columnsFrom": [
+            "businessId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "trade_offerings_individualProfileId_individual_activity_profiles_id_fk": {
+          "name": "trade_offerings_individualProfileId_individual_activity_profiles_id_fk",
+          "tableFrom": "trade_offerings",
+          "tableTo": "individual_activity_profiles",
+          "columnsFrom": [
+            "individualProfileId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "trade_offerings_createdByUserId_users_id_fk": {
+          "name": "trade_offerings_createdByUserId_users_id_fk",
+          "tableFrom": "trade_offerings",
+          "tableTo": "users",
+          "columnsFrom": [
+            "createdByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "trade_offerings_id": {
+          "name": "trade_offerings_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "trade_quotations": {
+      "name": "trade_quotations",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "rfqId": {
+          "name": "rfqId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "supplierUserId": {
+          "name": "supplierUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "unitPriceMinor": {
+          "name": "unitPriceMinor",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "currencyCode": {
+          "name": "currencyCode",
+          "type": "varchar(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'EGP'"
+        },
+        "leadTimeDays": {
+          "name": "leadTimeDays",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "termsJson": {
+          "name": "termsJson",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('submitted','countered','accepted','rejected','expired')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'submitted'"
+        },
+        "validUntil": {
+          "name": "validUntil",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "trade_quotations_rfq_idx": {
+          "name": "trade_quotations_rfq_idx",
+          "columns": [
+            "rfqId"
+          ],
+          "isUnique": false
+        },
+        "trade_quotations_supplier_idx": {
+          "name": "trade_quotations_supplier_idx",
+          "columns": [
+            "supplierUserId"
+          ],
+          "isUnique": false
+        },
+        "trade_quotations_status_idx": {
+          "name": "trade_quotations_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "trade_quotations_rfqId_trade_rfqs_id_fk": {
+          "name": "trade_quotations_rfqId_trade_rfqs_id_fk",
+          "tableFrom": "trade_quotations",
+          "tableTo": "trade_rfqs",
+          "columnsFrom": [
+            "rfqId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "trade_quotations_supplierUserId_users_id_fk": {
+          "name": "trade_quotations_supplierUserId_users_id_fk",
+          "tableFrom": "trade_quotations",
+          "tableTo": "users",
+          "columnsFrom": [
+            "supplierUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "trade_quotations_id": {
+          "name": "trade_quotations_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "trade_rfqs": {
+      "name": "trade_rfqs",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "matchId": {
+          "name": "matchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdByUserId": {
+          "name": "createdByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "requestedQuantity": {
+          "name": "requestedQuantity",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "quantityUnit": {
+          "name": "quantityUnit",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "deliveryTermsJson": {
+          "name": "deliveryTermsJson",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "paymentTermsJson": {
+          "name": "paymentTermsJson",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('draft','open','quoted','accepted','expired','cancelled')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'open'"
+        },
+        "validUntil": {
+          "name": "validUntil",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "trade_rfqs_match_idx": {
+          "name": "trade_rfqs_match_idx",
+          "columns": [
+            "matchId"
+          ],
+          "isUnique": false
+        },
+        "trade_rfqs_creator_idx": {
+          "name": "trade_rfqs_creator_idx",
+          "columns": [
+            "createdByUserId"
+          ],
+          "isUnique": false
+        },
+        "trade_rfqs_status_idx": {
+          "name": "trade_rfqs_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "trade_rfqs_matchId_trade_matches_id_fk": {
+          "name": "trade_rfqs_matchId_trade_matches_id_fk",
+          "tableFrom": "trade_rfqs",
+          "tableTo": "trade_matches",
+          "columnsFrom": [
+            "matchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "trade_rfqs_createdByUserId_users_id_fk": {
+          "name": "trade_rfqs_createdByUserId_users_id_fk",
+          "tableFrom": "trade_rfqs",
+          "tableTo": "users",
+          "columnsFrom": [
+            "createdByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "trade_rfqs_id": {
+          "name": "trade_rfqs_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "trade_transactions": {
+      "name": "trade_transactions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "rfqId": {
+          "name": "rfqId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "quotationId": {
+          "name": "quotationId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "matchId": {
+          "name": "matchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "offeringId": {
+          "name": "offeringId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "demandId": {
+          "name": "demandId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "buyerBusinessId": {
+          "name": "buyerBusinessId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sellerBusinessId": {
+          "name": "sellerBusinessId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "buyerIndividualProfileId": {
+          "name": "buyerIndividualProfileId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sellerIndividualProfileId": {
+          "name": "sellerIndividualProfileId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "quantityUnit": {
+          "name": "quantityUnit",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "unitPriceMinor": {
+          "name": "unitPriceMinor",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "totalPriceMinor": {
+          "name": "totalPriceMinor",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "currencyCode": {
+          "name": "currencyCode",
+          "type": "varchar(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'EGP'"
+        },
+        "deliveryTermsJson": {
+          "name": "deliveryTermsJson",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "paymentTermsJson": {
+          "name": "paymentTermsJson",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('accepted','processing','ready_for_pickup','in_transit','delivered','received','closed','cancelled','disputed')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'accepted'"
+        },
+        "paymentStatus": {
+          "name": "paymentStatus",
+          "type": "enum('unrecorded','cash_pending','bank_transfer_pending','credit_terms','external_recorded','settled')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'unrecorded'"
+        },
+        "ownerBusinessId": {
+          "name": "ownerBusinessId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "ownerIndividualProfileId": {
+          "name": "ownerIndividualProfileId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "custodianBusinessId": {
+          "name": "custodianBusinessId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "acceptedAt": {
+          "name": "acceptedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "closedAt": {
+          "name": "closedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "trade_transactions_rfq_idx": {
+          "name": "trade_transactions_rfq_idx",
+          "columns": [
+            "rfqId"
+          ],
+          "isUnique": false
+        },
+        "trade_transactions_status_idx": {
+          "name": "trade_transactions_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        },
+        "trade_transactions_buyer_idx": {
+          "name": "trade_transactions_buyer_idx",
+          "columns": [
+            "buyerBusinessId"
+          ],
+          "isUnique": false
+        },
+        "trade_transactions_seller_idx": {
+          "name": "trade_transactions_seller_idx",
+          "columns": [
+            "sellerBusinessId"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "trade_transactions_rfqId_trade_rfqs_id_fk": {
+          "name": "trade_transactions_rfqId_trade_rfqs_id_fk",
+          "tableFrom": "trade_transactions",
+          "tableTo": "trade_rfqs",
+          "columnsFrom": [
+            "rfqId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "trade_transactions_quotationId_trade_quotations_id_fk": {
+          "name": "trade_transactions_quotationId_trade_quotations_id_fk",
+          "tableFrom": "trade_transactions",
+          "tableTo": "trade_quotations",
+          "columnsFrom": [
+            "quotationId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "trade_transactions_matchId_trade_matches_id_fk": {
+          "name": "trade_transactions_matchId_trade_matches_id_fk",
+          "tableFrom": "trade_transactions",
+          "tableTo": "trade_matches",
+          "columnsFrom": [
+            "matchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "trade_transactions_offeringId_trade_offerings_id_fk": {
+          "name": "trade_transactions_offeringId_trade_offerings_id_fk",
+          "tableFrom": "trade_transactions",
+          "tableTo": "trade_offerings",
+          "columnsFrom": [
+            "offeringId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "trade_transactions_demandId_trade_demands_id_fk": {
+          "name": "trade_transactions_demandId_trade_demands_id_fk",
+          "tableFrom": "trade_transactions",
+          "tableTo": "trade_demands",
+          "columnsFrom": [
+            "demandId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "trade_transactions_buyerBusinessId_business_entities_id_fk": {
+          "name": "trade_transactions_buyerBusinessId_business_entities_id_fk",
+          "tableFrom": "trade_transactions",
+          "tableTo": "business_entities",
+          "columnsFrom": [
+            "buyerBusinessId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "trade_transactions_sellerBusinessId_business_entities_id_fk": {
+          "name": "trade_transactions_sellerBusinessId_business_entities_id_fk",
+          "tableFrom": "trade_transactions",
+          "tableTo": "business_entities",
+          "columnsFrom": [
+            "sellerBusinessId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "trade_transactions_buyerIndividualProfileId_individual_activity_profiles_id_fk": {
+          "name": "trade_transactions_buyerIndividualProfileId_individual_activity_profiles_id_fk",
+          "tableFrom": "trade_transactions",
+          "tableTo": "individual_activity_profiles",
+          "columnsFrom": [
+            "buyerIndividualProfileId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "trade_transactions_sellerIndividualProfileId_individual_activity_profiles_id_fk": {
+          "name": "trade_transactions_sellerIndividualProfileId_individual_activity_profiles_id_fk",
+          "tableFrom": "trade_transactions",
+          "tableTo": "individual_activity_profiles",
+          "columnsFrom": [
+            "sellerIndividualProfileId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "trade_transactions_ownerBusinessId_business_entities_id_fk": {
+          "name": "trade_transactions_ownerBusinessId_business_entities_id_fk",
+          "tableFrom": "trade_transactions",
+          "tableTo": "business_entities",
+          "columnsFrom": [
+            "ownerBusinessId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "trade_transactions_ownerIndividualProfileId_individual_activity_profiles_id_fk": {
+          "name": "trade_transactions_ownerIndividualProfileId_individual_activity_profiles_id_fk",
+          "tableFrom": "trade_transactions",
+          "tableTo": "individual_activity_profiles",
+          "columnsFrom": [
+            "ownerIndividualProfileId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "trade_transactions_custodianBusinessId_business_entities_id_fk": {
+          "name": "trade_transactions_custodianBusinessId_business_entities_id_fk",
+          "tableFrom": "trade_transactions",
+          "tableTo": "business_entities",
+          "columnsFrom": [
+            "custodianBusinessId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "trade_transactions_id": {
+          "name": "trade_transactions_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "transaction_deliveries": {
+      "name": "transaction_deliveries",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "transactionId": {
+          "name": "transactionId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "transportJobId": {
+          "name": "transportJobId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "deliveredQuantity": {
+          "name": "deliveredQuantity",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "acceptanceStatus": {
+          "name": "acceptanceStatus",
+          "type": "enum('pending','accepted_full','accepted_partial','rejected','damaged','shortage')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "receivedByUserId": {
+          "name": "receivedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "proofReference": {
+          "name": "proofReference",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deliveredAt": {
+          "name": "deliveredAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "receivedAt": {
+          "name": "receivedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "transaction_deliveries_transaction_idx": {
+          "name": "transaction_deliveries_transaction_idx",
+          "columns": [
+            "transactionId"
+          ],
+          "isUnique": false
+        },
+        "transaction_deliveries_transport_idx": {
+          "name": "transaction_deliveries_transport_idx",
+          "columns": [
+            "transportJobId"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "transaction_deliveries_transactionId_trade_transactions_id_fk": {
+          "name": "transaction_deliveries_transactionId_trade_transactions_id_fk",
+          "tableFrom": "transaction_deliveries",
+          "tableTo": "trade_transactions",
+          "columnsFrom": [
+            "transactionId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "transaction_deliveries_transportJobId_transport_jobs_id_fk": {
+          "name": "transaction_deliveries_transportJobId_transport_jobs_id_fk",
+          "tableFrom": "transaction_deliveries",
+          "tableTo": "transport_jobs",
+          "columnsFrom": [
+            "transportJobId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "transaction_deliveries_receivedByUserId_users_id_fk": {
+          "name": "transaction_deliveries_receivedByUserId_users_id_fk",
+          "tableFrom": "transaction_deliveries",
+          "tableTo": "users",
+          "columnsFrom": [
+            "receivedByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "transaction_deliveries_id": {
+          "name": "transaction_deliveries_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "transaction_disputes": {
+      "name": "transaction_disputes",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "transactionId": {
+          "name": "transactionId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "filedByUserId": {
+          "name": "filedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('open','under_review','resolved','rejected')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'open'"
+        },
+        "resolution": {
+          "name": "resolution",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "resolvedAt": {
+          "name": "resolvedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "transaction_disputes_transaction_idx": {
+          "name": "transaction_disputes_transaction_idx",
+          "columns": [
+            "transactionId"
+          ],
+          "isUnique": false
+        },
+        "transaction_disputes_status_idx": {
+          "name": "transaction_disputes_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "transaction_disputes_transactionId_trade_transactions_id_fk": {
+          "name": "transaction_disputes_transactionId_trade_transactions_id_fk",
+          "tableFrom": "transaction_disputes",
+          "tableTo": "trade_transactions",
+          "columnsFrom": [
+            "transactionId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "transaction_disputes_filedByUserId_users_id_fk": {
+          "name": "transaction_disputes_filedByUserId_users_id_fk",
+          "tableFrom": "transaction_disputes",
+          "tableTo": "users",
+          "columnsFrom": [
+            "filedByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "transaction_disputes_id": {
+          "name": "transaction_disputes_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "transaction_evidence": {
+      "name": "transaction_evidence",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "transactionId": {
+          "name": "transactionId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdByUserId": {
+          "name": "createdByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "evidenceType": {
+          "name": "evidenceType",
+          "type": "enum('quotation','agreement','proof_of_delivery','receipt','invoice','quality_certificate','other')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reference": {
+          "name": "reference",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "metadataJson": {
+          "name": "metadataJson",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "transaction_evidence_transaction_idx": {
+          "name": "transaction_evidence_transaction_idx",
+          "columns": [
+            "transactionId"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "transaction_evidence_transactionId_trade_transactions_id_fk": {
+          "name": "transaction_evidence_transactionId_trade_transactions_id_fk",
+          "tableFrom": "transaction_evidence",
+          "tableTo": "trade_transactions",
+          "columnsFrom": [
+            "transactionId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "transaction_evidence_createdByUserId_users_id_fk": {
+          "name": "transaction_evidence_createdByUserId_users_id_fk",
+          "tableFrom": "transaction_evidence",
+          "tableTo": "users",
+          "columnsFrom": [
+            "createdByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "transaction_evidence_id": {
+          "name": "transaction_evidence_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "transport_jobs": {
+      "name": "transport_jobs",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "transactionId": {
+          "name": "transactionId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "providerBusinessId": {
+          "name": "providerBusinessId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "driverReference": {
+          "name": "driverReference",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "vehicleReference": {
+          "name": "vehicleReference",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pickupLocationJson": {
+          "name": "pickupLocationJson",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "deliveryLocationJson": {
+          "name": "deliveryLocationJson",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('assigned','ready','picked_up','in_transit','delivered','failed','cancelled')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'assigned'"
+        },
+        "pickupAt": {
+          "name": "pickupAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deliveryAt": {
+          "name": "deliveryAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "transport_jobs_transaction_idx": {
+          "name": "transport_jobs_transaction_idx",
+          "columns": [
+            "transactionId"
+          ],
+          "isUnique": false
+        },
+        "transport_jobs_provider_idx": {
+          "name": "transport_jobs_provider_idx",
+          "columns": [
+            "providerBusinessId"
+          ],
+          "isUnique": false
+        },
+        "transport_jobs_status_idx": {
+          "name": "transport_jobs_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "transport_jobs_transactionId_trade_transactions_id_fk": {
+          "name": "transport_jobs_transactionId_trade_transactions_id_fk",
+          "tableFrom": "transport_jobs",
+          "tableTo": "trade_transactions",
+          "columnsFrom": [
+            "transactionId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "transport_jobs_providerBusinessId_business_entities_id_fk": {
+          "name": "transport_jobs_providerBusinessId_business_entities_id_fk",
+          "tableFrom": "transport_jobs",
+          "tableTo": "business_entities",
+          "columnsFrom": [
+            "providerBusinessId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "transport_jobs_id": {
+          "name": "transport_jobs_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "users": {
+      "name": "users",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "openId": {
+          "name": "openId",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(320)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "loginMethod": {
+          "name": "loginMethod",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "enum('user','admin','owner')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'user'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        },
+        "lastSignedIn": {
+          "name": "lastSignedIn",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "users_id": {
+          "name": "users_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {
+        "users_openId_unique": {
+          "name": "users_openId_unique",
+          "columns": [
+            "openId"
+          ]
+        }
+      },
+      "checkConstraint": {}
+    }
+  },
+  "views": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "tables": {},
+    "indexes": {}
+  }
+}
