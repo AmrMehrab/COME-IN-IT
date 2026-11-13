@@ -50,7 +50,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Apply database schema
-        run: pnpm db:push
+        run: pnpm exec drizzle-kit push --force
 
       - name: TypeScript check
         run: pnpm check
