@@ -1,5 +1,5 @@
 import {
-  type AnyMySqlColumn,
+  foreignKey,
   index,
   int,
   mysqlEnum,
@@ -417,13 +417,18 @@ export const healthRecordReferences = mysqlTable(
     occurredAt: timestamp("occurredAt").notNull(),
     submittedAt: timestamp("submittedAt").defaultNow().notNull(),
     lockedAt: timestamp("lockedAt").defaultNow().notNull(),
-    amendsRecordId: int("amendsRecordId").references((): AnyMySqlColumn => healthRecordReferences.id, { onDelete: "restrict" }),
+    amendsRecordId: int("amendsRecordId"),
     amendmentReason: varchar("amendmentReason", { length: 240 }),
     dataClassification: mysqlEnum("dataClassification", ["confidential_sovereign", "highly_sensitive_health"])
       .default("highly_sensitive_health")
       .notNull(),
   },
   table => [
+    foreignKey({
+      columns: [table.amendsRecordId],
+      foreignColumns: [table.id],
+      name: "health_record_refs_amends_fk",
+    }).onDelete("restrict"),
     index("health_record_references_profile_idx").on(table.healthProfileId),
     index("health_record_references_provider_idx").on(table.sourceProviderId),
     index("health_record_references_status_idx").on(table.provenanceStatus),
@@ -517,12 +522,8 @@ export const healthEmergencyAccessRequests = mysqlTable(
   "health_emergency_access_requests",
   {
     id: int("id").autoincrement().primaryKey(),
-    healthProfileId: int("healthProfileId")
-      .notNull()
-      .references(() => healthProfiles.id, { onDelete: "restrict" }),
-    providerId: int("providerId")
-      .notNull()
-      .references(() => healthProviders.id, { onDelete: "restrict" }),
+    healthProfileId: int("healthProfileId").notNull(),
+    providerId: int("providerId").notNull(),
     requesterUserId: int("requesterUserId")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
@@ -539,6 +540,16 @@ export const healthEmergencyAccessRequests = mysqlTable(
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
   table => [
+    foreignKey({
+      columns: [table.healthProfileId],
+      foreignColumns: [healthProfiles.id],
+      name: "health_emergency_profile_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.providerId],
+      foreignColumns: [healthProviders.id],
+      name: "health_emergency_provider_fk",
+    }).onDelete("restrict"),
     index("health_emergency_profile_idx").on(table.healthProfileId),
     index("health_emergency_requester_idx").on(table.requesterUserId),
     index("health_emergency_status_idx").on(table.status),
@@ -595,9 +606,7 @@ export const businessActivityVerifications = mysqlTable(
   "business_activity_verifications",
   {
     id: int("id").autoincrement().primaryKey(),
-    businessId: int("businessId")
-      .notNull()
-      .references(() => businessEntities.id, { onDelete: "restrict" }),
+    businessId: int("businessId").notNull(),
     activityType: mysqlEnum("activityType", ["factory", "importer", "exporter", "store", "service_provider"])
       .notNull(),
     verificationStatus: mysqlEnum("verificationStatus", [
@@ -618,6 +627,11 @@ export const businessActivityVerifications = mysqlTable(
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
   table => [
+    foreignKey({
+      columns: [table.businessId],
+      foreignColumns: [businessEntities.id],
+      name: "business_activity_business_fk",
+    }).onDelete("restrict"),
     uniqueIndex("business_activity_business_type_unique").on(table.businessId, table.activityType),
     index("business_activity_status_idx").on(table.verificationStatus),
   ],
@@ -634,9 +648,7 @@ export const tradeOfferings = mysqlTable(
     id: int("id").autoincrement().primaryKey(),
     businessId: int("businessId")
       .references(() => businessEntities.id, { onDelete: "restrict" }),
-    individualProfileId: int("individualProfileId").references(() => individualActivityProfiles.id, {
-      onDelete: "restrict",
-    }),
+    individualProfileId: int("individualProfileId"),
     supplierKind: mysqlEnum("supplierKind", ["business", "individual"]).default("business").notNull(),
     createdByUserId: int("createdByUserId")
       .notNull()
@@ -670,6 +682,11 @@ export const tradeOfferings = mysqlTable(
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
   table => [
+    foreignKey({
+      columns: [table.individualProfileId],
+      foreignColumns: [individualActivityProfiles.id],
+      name: "trade_offerings_individual_fk",
+    }).onDelete("restrict"),
     index("trade_offerings_business_idx").on(table.businessId),
     index("trade_offerings_individual_profile_idx").on(table.individualProfileId),
     index("trade_offerings_creator_idx").on(table.createdByUserId),
@@ -708,9 +725,7 @@ export const tradeDemands = mysqlTable(
     id: int("id").autoincrement().primaryKey(),
     requesterBusinessId: int("requesterBusinessId")
       .references(() => businessEntities.id, { onDelete: "restrict" }),
-    requesterIndividualProfileId: int("requesterIndividualProfileId").references(() => individualActivityProfiles.id, {
-      onDelete: "restrict",
-    }),
+    requesterIndividualProfileId: int("requesterIndividualProfileId"),
     requesterKind: mysqlEnum("requesterKind", ["business", "individual"]).default("business").notNull(),
     createdByUserId: int("createdByUserId")
       .notNull()
@@ -726,6 +741,11 @@ export const tradeDemands = mysqlTable(
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
   table => [
+    foreignKey({
+      columns: [table.requesterIndividualProfileId],
+      foreignColumns: [individualActivityProfiles.id],
+      name: "trade_demands_individual_fk",
+    }).onDelete("restrict"),
     index("trade_demands_requester_idx").on(table.requesterBusinessId),
     index("trade_demands_individual_profile_idx").on(table.requesterIndividualProfileId),
     index("trade_demands_creator_idx").on(table.createdByUserId),
@@ -820,8 +840,8 @@ export const tradeTransactions = mysqlTable(
     demandId: int("demandId").notNull().references(() => tradeDemands.id, { onDelete: "restrict" }),
     buyerBusinessId: int("buyerBusinessId").references(() => businessEntities.id, { onDelete: "restrict" }),
     sellerBusinessId: int("sellerBusinessId").references(() => businessEntities.id, { onDelete: "restrict" }),
-    buyerIndividualProfileId: int("buyerIndividualProfileId").references(() => individualActivityProfiles.id, { onDelete: "restrict" }),
-    sellerIndividualProfileId: int("sellerIndividualProfileId").references(() => individualActivityProfiles.id, { onDelete: "restrict" }),
+    buyerIndividualProfileId: int("buyerIndividualProfileId"),
+    sellerIndividualProfileId: int("sellerIndividualProfileId"),
     quantity: int("quantity").notNull(),
     quantityUnit: varchar("quantityUnit", { length: 32 }).notNull(),
     unitPriceMinor: int("unitPriceMinor").notNull(),
@@ -832,14 +852,34 @@ export const tradeTransactions = mysqlTable(
     status: mysqlEnum("status", ["accepted", "processing", "ready_for_pickup", "in_transit", "delivered", "received", "closed", "cancelled", "disputed"]).default("accepted").notNull(),
     paymentStatus: mysqlEnum("paymentStatus", ["unrecorded", "cash_pending", "bank_transfer_pending", "credit_terms", "external_recorded", "settled"]).default("unrecorded").notNull(),
     ownerBusinessId: int("ownerBusinessId").references(() => businessEntities.id, { onDelete: "set null" }),
-    ownerIndividualProfileId: int("ownerIndividualProfileId").references(() => individualActivityProfiles.id, { onDelete: "set null" }),
+    ownerIndividualProfileId: int("ownerIndividualProfileId"),
     custodianBusinessId: int("custodianBusinessId").references(() => businessEntities.id, { onDelete: "set null" }),
     acceptedAt: timestamp("acceptedAt").defaultNow().notNull(),
     closedAt: timestamp("closedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  table => [index("trade_transactions_rfq_idx").on(table.rfqId), index("trade_transactions_status_idx").on(table.status), index("trade_transactions_buyer_idx").on(table.buyerBusinessId), index("trade_transactions_seller_idx").on(table.sellerBusinessId)],
+  table => [
+    foreignKey({
+      columns: [table.buyerIndividualProfileId],
+      foreignColumns: [individualActivityProfiles.id],
+      name: "trade_tx_buyer_individual_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.sellerIndividualProfileId],
+      foreignColumns: [individualActivityProfiles.id],
+      name: "trade_tx_seller_individual_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.ownerIndividualProfileId],
+      foreignColumns: [individualActivityProfiles.id],
+      name: "trade_tx_owner_individual_fk",
+    }).onDelete("set null"),
+    index("trade_transactions_rfq_idx").on(table.rfqId),
+    index("trade_transactions_status_idx").on(table.status),
+    index("trade_transactions_buyer_idx").on(table.buyerBusinessId),
+    index("trade_transactions_seller_idx").on(table.sellerBusinessId),
+  ],
 );
 
 /** A transport provider is a custodian only; it never becomes the owner. */
