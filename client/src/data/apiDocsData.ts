@@ -21,11 +21,11 @@ export const API_ENDPOINTS: ApiEndpoint[] = [
     description: "إرسال البيانات الشخصية والوثائق الرسمية للتحقق من هوية الأفراد عبر البوابة القومية للاتصالات والداخلية.",
     authRequired: "Bearer Token (User Level)",
     requestBody: {
-      nationalId: "29812050102938",
-      fullName: "محمد أحمد حسن إبراهيم",
+      nationalId: "00000000000000",
+      fullName: "اسم تجريبي غير حقيقي",
       documentType: "NATIONAL_ID",
-      documentFrontUrl: "/manus-storage/doc_front_9918.png",
-      documentBackUrl: "/manus-storage/doc_back_9918.png",
+      documentFrontUrl: "https://example.invalid/test-document-front.png",
+      documentBackUrl: "https://example.invalid/test-document-back.png",
       issuingState: "ARE"
     },
     responseBody: {
@@ -41,9 +41,9 @@ export const API_ENDPOINTS: ApiEndpoint[] = [
       }
     },
     curlExample: `curl -X POST "https://api.come-in-it.gov.eg/api/v1/identity/kyc/verify" \\
-  -H "Authorization: Bearer cii_live_99812...кура" \\
+  -H "Authorization: Bearer REDACTED_TEST_TOKEN" \\
   -H "Content-Type: application/json" \\
-  -d '{"nationalId": "29812050102938", "fullName": "محمد أحمد حسن إبراهيم"}'`
+  -d '{"nationalId": "00000000000000", "fullName": "اسم تجريبي غير حقيقي"}'`
   },
   {
     id: "kyb-submit",
@@ -75,7 +75,7 @@ export const API_ENDPOINTS: ApiEndpoint[] = [
       }
     },
     curlExample: `curl -X POST "https://api.come-in-it.gov.eg/api/v1/business/kyb/register" \\
-  -H "Authorization: Bearer cii_live_99812..." \\
+  -H "Authorization: Bearer REDACTED_TEST_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{"commercialRegisterNumber": "109283-EG", "taxId": "492-102-398"}'`
   },
@@ -111,7 +111,7 @@ export const API_ENDPOINTS: ApiEndpoint[] = [
       }
     },
     curlExample: `curl -X POST "https://api.come-in-it.gov.eg/api/v1/marketplace/products/verify" \\
-  -H "Authorization: Bearer cii_live_99812..." \\
+  -H "Authorization: Bearer REDACTED_TEST_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{"businessId": "biz_88192041", "productName": "خط إنتاج تعبئة أوتوماتيكي موديل X9", "hsCode": "8422.30.00"}'`
   },
@@ -142,7 +142,7 @@ export const API_ENDPOINTS: ApiEndpoint[] = [
       }
     },
     curlExample: `curl -X POST "https://api.come-in-it.gov.eg/api/v1/services/register" \\
-  -H "Authorization: Bearer cii_live_99812..." \\
+  -H "Authorization: Bearer REDACTED_TEST_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{"businessId": "biz_55210931", "serviceType": "LOGISTICS_FREIGHT"}'`
   },
@@ -182,7 +182,7 @@ export const API_ENDPOINTS: ApiEndpoint[] = [
       }
     },
     curlExample: `curl -X POST "https://api.come-in-it.gov.eg/api/v1/engine/match" \\
-  -H "Authorization: Bearer cii_live_99812..." \\
+  -H "Authorization: Bearer REDACTED_TEST_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{"buyerBusinessId": "biz_88192041", "tradeModel": "B2B", "targetCategory": "INDUSTRIAL_MACHINERY"}'`
   },
@@ -214,6 +214,6 @@ export const API_ENDPOINTS: ApiEndpoint[] = [
       }
     },
     curlExample: `curl -X GET "https://api.come-in-it.gov.eg/api/v1/audit/worm/logs?entityId=biz_88192041&limit=10" \\
-  -H "Authorization: Bearer cii_admin_token..."`
+  -H "Authorization: Bearer REDACTED_ADMIN_TEST_TOKEN"`
   }
 ];

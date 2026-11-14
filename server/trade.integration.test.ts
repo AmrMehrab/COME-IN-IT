@@ -313,6 +313,7 @@ describe("trade operations foundation", () => {
 
       await expect(closeTradeTransactionForUser(buyerUserId, transactionId)).rejects.toThrow("Transaction must be received before closure");
       await updateTradeTransactionPaymentForUser(buyerUserId, transactionId, "settled");
+      await expect(updateTradeTransactionPaymentForUser(supplierUserId, transactionId, "settled")).rejects.toThrow("Only the buyer or current owner");
 
       const transport = await createTransportJobForUser(supplierUserId, {
         transactionId,
@@ -330,7 +331,7 @@ describe("trade operations foundation", () => {
       const inTransit = await advanceTradeTransportForUser(supplierUserId, transportJobId, "in_transit");
       expect(inTransit.status).toBe("in_transit");
 
-      const delivery = await recordTradeDeliveryForUser(buyerUserId, {
+      const delivery = await recordTradeDeliveryForUser(supplierUserId, {
         transactionId,
         transportJobId,
         deliveredQuantity: 10,
@@ -340,6 +341,7 @@ describe("trade operations foundation", () => {
       deliveryId = delivery.deliveryId;
       expect(delivery.status).toBe("delivered");
 
+      await expect(acceptTradeDeliveryForUser(supplierUserId, deliveryId, "accepted_full")).rejects.toThrow("RECEIVING_PARTY_REQUIRED");
       const received = await acceptTradeDeliveryForUser(buyerUserId, deliveryId, "accepted_full", "Quantity and condition accepted");
       expect(received.acceptanceStatus).toBe("accepted_full");
       const closed = await closeTradeTransactionForUser(buyerUserId, transactionId);

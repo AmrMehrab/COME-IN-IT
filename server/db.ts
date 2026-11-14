@@ -127,6 +127,16 @@ function requireDatabase<T>(database: T | null): T {
   return database;
 }
 
+async function assertAdminOrOwner(userId: number) {
+  const db = requireDatabase(await getDb());
+  const rows = await db
+    .select({ role: users.role })
+    .from(users)
+    .where(and(eq(users.id, userId), or(eq(users.role, "admin"), eq(users.role, "owner"))))
+    .limit(1);
+  if (!rows[0]) throw new Error("Administrative privileges are required");
+}
+
 export async function listSpecificationBookmarks(userId: number): Promise<number[]> {
   const db = requireDatabase(await getDb());
   const rows = await db
@@ -670,6 +680,7 @@ export async function reviewKycVerification(
   expiresAt?: Date | null,
 ) {
   const db = requireDatabase(await getDb());
+  await assertAdminOrOwner(reviewerUserId);
   const current = await db
     .select({ personId: kycVerifications.personId, status: kycVerifications.status })
     .from(kycVerifications)
@@ -799,6 +810,7 @@ export async function reviewKybVerification(
   expiresAt?: Date | null,
 ) {
   const db = requireDatabase(await getDb());
+  await assertAdminOrOwner(reviewerUserId);
   const current = await db
     .select({ businessId: kybVerifications.businessId, status: kybVerifications.status })
     .from(kybVerifications)
@@ -1022,6 +1034,7 @@ export async function reviewIndividualActivityProfile(
   status: ActivityReviewStatus,
 ) {
   const db = requireDatabase(await getDb());
+  await assertAdminOrOwner(reviewerUserId);
   const current = await db
     .select({ status: individualActivityProfiles.verificationStatus, activityType: individualActivityProfiles.activityType })
     .from(individualActivityProfiles)
@@ -1133,6 +1146,7 @@ export async function reviewBusinessActivityVerification(
   expiresAt?: Date | null,
 ) {
   const db = requireDatabase(await getDb());
+  await assertAdminOrOwner(reviewerUserId);
   const current = await db
     .select({
       businessId: businessActivityVerifications.businessId,
@@ -1443,6 +1457,7 @@ export async function reviewTradeOffering(
   status: TradeOfferingReviewStatus,
 ) {
   const db = requireDatabase(await getDb());
+  await assertAdminOrOwner(reviewerUserId);
   const current = await db
     .select({
       status: tradeOfferings.verificationStatus,
@@ -1729,7 +1744,7 @@ async function assertTradeTransactionParticipant(userId: number, transactionId: 
   const memberships = await db
     .select({ businessId: businessMemberships.businessId })
     .from(businessMemberships)
-    .where(and(eq(businessMemberships.userId, userId), eq(businessMemberships.status, "active")));
+    .where(and(eq(businessMemberships.userId, userId), eq(businessMemberships.status, "active"), ne(businessMemberships.membershipRole, "viewer")));
   const membershipIds = new Set(memberships.map(item => item.businessId));
   const businessAllowed = [transaction[0].buyerBusinessId, transaction[0].sellerBusinessId, transaction[0].ownerBusinessId, transaction[0].custodianBusinessId]
     .filter((value): value is number => typeof value === "number")
@@ -1742,6 +1757,28 @@ async function assertTradeTransactionParticipant(userId: number, transactionId: 
     .some(value => profileIds.has(value));
   if (!businessAllowed && !individualAllowed) throw new Error("User is not authorized for this trade transaction");
   return transaction[0];
+}
+
+async function getTradeTransactionActorCapabilities(userId: number, transaction: typeof tradeTransactions.$inferSelect) {
+  const db = requireDatabase(await getDb());
+  const memberships = await db
+    .select({ businessId: businessMemberships.businessId })
+    .from(businessMemberships)
+    .where(and(eq(businessMemberships.userId, userId), eq(businessMemberships.status, "active"), ne(businessMemberships.membershipRole, "viewer")));
+  const person = await getOrCreatePersonForUser(userId);
+  const profiles = await db
+    .select({ id: individualActivityProfiles.id })
+    .from(individualActivityProfiles)
+    .where(eq(individualActivityProfiles.personId, person.id));
+  const membershipIds = new Set(memberships.map(item => item.businessId));
+  const profileIds = new Set(profiles.map(item => item.id));
+  const isBusiness = (id: number | null) => id !== null && membershipIds.has(id);
+  const isProfile = (id: number | null) => id !== null && profileIds.has(id);
+  return {
+    actorIsBuyer: isBusiness(transaction.buyerBusinessId) || isProfile(transaction.buyerIndividualProfileId),
+    actorIsOwner: isBusiness(transaction.ownerBusinessId) || isProfile(transaction.ownerIndividualProfileId),
+    actorIsCustodian: isBusiness(transaction.custodianBusinessId),
+  };
 }
 
 export async function createTradeRfqForUser(
@@ -1884,6 +1921,19 @@ export async function acceptTradeQuotationForUser(userId: number, quotationId: n
 export async function updateTradeTransactionPaymentForUser(userId: number, transactionId: number, paymentStatus: "cash_pending" | "bank_transfer_pending" | "credit_terms" | "external_recorded" | "settled") {
   const db = requireDatabase(await getDb());
   const transaction = await assertTradeTransactionParticipant(userId, transactionId);
+  const actor = await getTradeTransactionActorCapabilities(userId, transaction);
+  if (!actor.actorIsBuyer && !actor.actorIsOwner) throw new Error("Only the buyer or current owner may update payment status");
+  const allowedTransitions: Record<string, readonly string[]> = {
+    unrecorded: ["cash_pending", "bank_transfer_pending", "credit_terms"],
+    cash_pending: ["external_recorded", "settled"],
+    bank_transfer_pending: ["external_recorded", "settled"],
+    credit_terms: ["settled"],
+    external_recorded: ["settled"],
+    settled: ["settled"],
+  };
+  if (!allowedTransitions[transaction.paymentStatus]?.includes(paymentStatus)) {
+    throw new Error(`Payment transition from ${transaction.paymentStatus} to ${paymentStatus} is not allowed`);
+  }
   await enforceTradePolicy(userId, "trade.payment.update", "trade_transaction", String(transactionId), {
     actorIsParticipant: true,
     transactionStatus: transaction.status,
@@ -1918,7 +1968,9 @@ export async function advanceTradeTransportForUser(userId: number, jobId: number
   const db = requireDatabase(await getDb());
   const job = await db.select().from(transportJobs).where(eq(transportJobs.id, jobId)).limit(1);
   if (!job[0]) throw new Error("Transport job was not found");
-  await assertTradeTransactionParticipant(userId, job[0].transactionId);
+  const transaction = await assertTradeTransactionParticipant(userId, job[0].transactionId);
+  const actor = await getTradeTransactionActorCapabilities(userId, transaction);
+  if (!actor.actorIsCustodian) throw new Error("Only the assigned transport custodian may advance transport");
   const allowed: Record<string, string[]> = { assigned: ["ready"], ready: ["picked_up"], picked_up: ["in_transit"] };
   if (!allowed[job[0].status]?.includes(status)) throw new Error(`Transport transition from ${job[0].status} to ${status} is not allowed`);
   await enforceTradePolicy(userId, "trade.transport.advance", "transport_job", String(jobId), {
@@ -1935,9 +1987,12 @@ export async function advanceTradeTransportForUser(userId: number, jobId: number
 export async function recordTradeDeliveryForUser(userId: number, input: { transactionId: number; transportJobId: number; deliveredQuantity: number; proofReference: string; notes?: string }) {
   const db = requireDatabase(await getDb());
   const transaction = await assertTradeTransactionParticipant(userId, input.transactionId);
+  const actor = await getTradeTransactionActorCapabilities(userId, transaction);
+  if (!actor.actorIsCustodian) throw new Error("Only the assigned transport custodian may record delivery");
+  if (input.deliveredQuantity > transaction.quantity) throw new Error("Delivered quantity cannot exceed the transaction quantity");
   if (!["in_transit", "ready_for_pickup"].includes(transaction.status)) throw new Error("Delivery requires an in-transit transaction");
   const job = await db.select().from(transportJobs).where(and(eq(transportJobs.id, input.transportJobId), eq(transportJobs.transactionId, input.transactionId))).limit(1);
-  if (!job[0]) throw new Error("Transport job does not belong to this transaction");
+  if (!job[0] || job[0].status !== "in_transit") throw new Error("Delivery requires the assigned transport job to be in transit");
   await enforceTradePolicy(userId, "trade.delivery.record", "transaction_delivery", `transaction:${input.transactionId}`, {
     actorIsParticipant: true,
     transactionStatus: transaction.status,
@@ -1956,9 +2011,11 @@ export async function acceptTradeDeliveryForUser(userId: number, deliveryId: num
   const delivery = await db.select().from(transactionDeliveries).where(eq(transactionDeliveries.id, deliveryId)).limit(1);
   if (!delivery[0]) throw new Error("Transaction delivery was not found");
   const transaction = await assertTradeTransactionParticipant(userId, delivery[0].transactionId);
+  const actor = await getTradeTransactionActorCapabilities(userId, transaction);
   await enforceTradePolicy(userId, "trade.delivery.accept", "transaction_delivery", String(deliveryId), {
     actorIsParticipant: true,
-    actorIsBuyer: true,
+    actorIsBuyer: actor.actorIsBuyer,
+    actorIsOwner: actor.actorIsOwner,
     transactionStatus: transaction.status,
   });
   if (transaction.status !== "delivered") throw new Error("Only delivered transactions can be received");
@@ -1976,9 +2033,11 @@ export async function acceptTradeDeliveryForUser(userId: number, deliveryId: num
 export async function closeTradeTransactionForUser(userId: number, transactionId: number) {
   const db = requireDatabase(await getDb());
   const transaction = await assertTradeTransactionParticipant(userId, transactionId);
+  const actor = await getTradeTransactionActorCapabilities(userId, transaction);
   await enforceTradePolicy(userId, "trade.transaction.close", "trade_transaction", String(transactionId), {
     actorIsParticipant: true,
-    actorIsBuyer: true,
+    actorIsBuyer: actor.actorIsBuyer,
+    actorIsOwner: actor.actorIsOwner,
     transactionStatus: transaction.status,
     paymentStatus: transaction.paymentStatus,
   });
@@ -2363,6 +2422,7 @@ export async function reviewHealthRecordReference(
   provenanceStatus: Extract<HealthRecordProvenanceStatus, "verified" | "rejected">,
 ) {
   const db = requireDatabase(await getDb());
+  await assertAdminOrOwner(adminUserId);
   const current = await db
     .select({ provenanceStatus: healthRecordReferences.provenanceStatus })
     .from(healthRecordReferences)
@@ -2405,7 +2465,7 @@ export async function requestHealthAccess(
   let consentId: number | null = null;
   if (!profile[0] || profile[0].status !== "active") {
     denialCode = "profile_unavailable";
-  } else if (!role || role.providerStatus !== "verified") {
+  } else if (!role || role.providerStatus !== "verified" || !["provider_admin", "health_professional", "emergency_clinician"].includes(role.role)) {
     denialCode = "provider_role_not_eligible";
   } else {
     const consents = await db
@@ -2454,6 +2514,7 @@ export async function createHealthProvider(
   input: { legalName: string; providerType: HealthProviderType; licenseReference?: string },
 ) {
   const db = requireDatabase(await getDb());
+  await assertAdminOrOwner(adminUserId);
   const inserted = await db.insert(healthProviders).values({
     legalName: input.legalName,
     providerType: input.providerType,
@@ -2476,6 +2537,7 @@ export async function updateHealthProviderVerification(
   verificationStatus: "verified" | "suspended" | "expired" | "rejected",
 ) {
   const db = requireDatabase(await getDb());
+  await assertAdminOrOwner(adminUserId);
   await db.update(healthProviders).set({ verificationStatus }).where(eq(healthProviders.id, providerId));
   await appendAuditEvent({
     actorUserId: adminUserId,
@@ -2493,6 +2555,7 @@ export async function assignHealthProviderRole(
   input: { healthProviderId: number; userId: number; role: HealthProviderRole },
 ) {
   const db = requireDatabase(await getDb());
+  await assertAdminOrOwner(adminUserId);
   await db
     .insert(healthProviderRoles)
     .values({ healthProviderId: input.healthProviderId, userId: input.userId, role: input.role })
@@ -2516,6 +2579,12 @@ export async function requestEmergencyHealthAccess(
   if (!role || role.role !== "emergency_clinician" || role.providerStatus !== "verified") {
     throw new Error("An active emergency clinician role at a verified health provider is required");
   }
+  const profile = await db
+    .select({ id: healthProfiles.id, status: healthProfiles.status })
+    .from(healthProfiles)
+    .where(eq(healthProfiles.id, input.healthProfileId))
+    .limit(1);
+  if (!profile[0] || profile[0].status !== "active") throw new Error("An active health profile is required for emergency access");
   const inserted = await db.insert(healthEmergencyAccessRequests).values({
     healthProfileId: input.healthProfileId,
     providerId: input.healthProviderId,
@@ -2542,6 +2611,7 @@ export async function reviewEmergencyHealthAccess(
   reviewNote?: string,
 ) {
   const db = requireDatabase(await getDb());
+  await assertAdminOrOwner(adminUserId);
   const current = await db
     .select({ status: healthEmergencyAccessRequests.status })
     .from(healthEmergencyAccessRequests)
