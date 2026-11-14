@@ -79,6 +79,7 @@ export const appRouter = router({
     catalog: protectedProcedure.query(({ ctx }) => db.listVerifiedCommerceCatalogForUser(ctx.user.id)),
     create: protectedProcedure
       .input(z.object({
+        buyerBusinessId: z.number().int().positive(),
         offeringId: z.number().int().positive(),
         quantity: z.number().int().positive(),
         message: z.string().trim().min(5).max(4_000),
@@ -88,6 +89,9 @@ export const appRouter = router({
 
   businesses: router({
     list: protectedProcedure.query(({ ctx }) => db.listBusinessEntitiesForUser(ctx.user.id)),
+    context: protectedProcedure
+      .input(z.object({ businessId: z.number().int().positive() }))
+      .query(({ ctx, input }) => db.getBusinessContextForUser(ctx.user.id, input.businessId)),
     create: protectedProcedure
       .input(
         z.object({

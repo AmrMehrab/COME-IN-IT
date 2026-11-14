@@ -1,33 +1,31 @@
 # COME IN IT V1.0 — Gap Register
 
-| ID | Severity | Finding | Resolution / condition | Owner | Status |
-|---|---|---|---|---|---|
-| G-001 | Critical | Contract, Order, Transaction, Dispute, and Evidence were incomplete in the previous baseline. | Adopt canonical entities and non-destructive migrations. | Domain + Data Architecture | Resolved in canonical model |
-| G-002 | Critical | Existing permission matrix is not a complete contextual policy engine. | Implement server-side RBAC + ABAC with lifecycle and classification attributes. | Security + Authorization | Open for V1.1 |
-| G-003 | High | Existing API examples cover only part of the workflow baseline. | Complete endpoint contracts and contract tests for WF-001…WF-030. | API Platform | Open for V1.1 |
-| G-004 | High | Current simulators are illustrative, not authoritative state machines. | Move lifecycle transitions to governed backend services with idempotency. | Platform Engineering | Open for V1.1 |
-| G-005 | Medium | Government attestation and real e-signature integration lack approved credentials and legal scope. | Keep safe simulation until provider, key, and legal approvals exist. | Legal + Government Relations | Explicitly out of scope |
+الحالة أدناه تخص الشيفرة على `feature/CIT-PORTAL-001` بتاريخ 2026-11-15. **منفذ في الشيفرة** لا يعني أن السياسة التجارية أو القانونية ذات الصلة قد اعتمدت، ولا يعني أن قاعدة بيانات إنتاج تغيرت.
 
-## Release gate
+| ID | Severity | Finding | Evidence / next action | Status |
+|---|---|---|---|---|
+| G-001 | Critical | فصل المنشئ عن المالك والعضويات لم يكن ممثلاً بما يكفي في مخطط الهوية. | حقول `createdBy*` منفصلة عن `owner*`؛ ينشأ سجل المنشأة بلا مالك أو عضوية تلقائية؛ migration آمن مولد فقط. | منفذ جزئياً؛ إثبات الملكية والإسناد مؤجلان |
+| G-002 | Critical | التفويض السابق لم يكن يفرض منحاً صريحة وسياقاً محدداً. | محرك رفض-افتراضي يتحقق من السياق والعضوية النشطة وKYC وKYB عند اشتراطه والمنحة النشطة/غير المنتهية؛ 8 اختبارات وحدة. | منفذ لطبقة IAM المحددة؛ ABAC الأوسع غير مكتمل |
+| G-003 | High | عقود API لا تغطي جميع مسارات التصميم وإدارة العضويات. | عمليات التجارة وKYC/KYB موجودة؛ لا توجد API عامة لإدارة عضوية/منح، ولا عقود كاملة لكل WF. | منفذ جزئياً |
+| G-004 | High | توثيق مسارات التجارة بالغ في وصفها كمحاكاة أو كمسار مكتمل مثبت. | خدمات دورة RFQ/Quotation/Transaction/fulfillment موجودة، لكن اختبارات تكامل قاعدة البيانات لم تعمل لغياب `DATABASE_URL`. | منفذ جزئياً؛ يلزم نجاح التكامل |
+| G-005 | Medium | إثبات حكومي وتوقيع إلكتروني حقيقي بلا نطاق أو اعتمادات مقرة. | إبقاء التكامل الحكومي والتوقيع القانوني مغلقين؛ B2G PO يرفض صراحة. | خارج النطاق / ينتظر اعتماداً |
+| G-006 | Critical | ملكية المنشأة وأدلة التمثيل وتعدد المالكين غير محسومة. | لا تعيين مالك تلقائي ولا واجهة لإثبات/اعتماد الملكية. لا تضف قواعد قانونية أو نصاباً مفترضاً. | مفتوح؛ fail closed |
+| G-007 | High | إدارة العضويات والمنح وإبطالها تحتاج مساراً تشغيلياً معتمداً. | جدول `business_membership_permissions` موجود، لكن لا يوجد API عام لإنشاء/إلغاء عضوية أو منح؛ الاختبارات تزرع بيانات الاختبار مباشرة. | مفتوح؛ لا وصول تجاري دون المنحة |
+| G-008 | High | مسارات C2C/B2C/C2B وB2G تحتاج سياسة عمل وسلامة/امتثال محددة. | PO الحالي يتطلب منشأة مشتري وعرضاً تجارياً؛ المسارات الفردية والحكومية مغلقة. | مفتوح؛ fail closed |
+| G-009 | High | سجلات التفويض المنظمة لا تحقق بذاتها عدم قابلية التعديل أو متطلبات الاحتفاظ. | يسجل التطبيق actor/business/membership/permission/decision/reason؛ لم يثبت WORM ولا retention policy. | منفذ جزئياً؛ حوكمة التخزين مؤجلة |
+| G-010 | Medium | معايير MFA وأعمار الجلسة واستعادة الحساب غير معتمدة. | لم تضاف افتراضات تشغيلية جديدة. | مفتوح؛ لا ادعاء امتثال |
+| G-011 | Medium | سياسة الخصوصية، موافقة مشاركة الملف المهني، مدد الاحتفاظ ودعم الوصول غير محسومة. | ليست ضمن التغيير الحالي؛ لا يوجد إنشاء/تسويق لمسارات توظيف تجارية جديدة هنا. | مفتوح؛ لا افتراض |
+| G-012 | High | لا توجد قاعدة اختبار معتمدة متاحة لإثبات اختبارات التكامل. | لا `DATABASE_URL` مضبوط؛ `getDb()` أعاد `null` في التشغيل المباشر لملف التكامل. | غير متحقق |
+| G-013 | High | ملف المحترف ومسارات نشر الوظائف/التقديم غير منفذة. | Issue #9 مؤجل حتى اعتماد سياسة الخصوصية والموافقة الصريحة على مشاركة البيانات ونطاق الحقول والاحتفاظ؛ لا تنشئ الموافقة أو التقديم عضوية تلقائياً. | غير منفذ؛ مؤجل للسياسة |
 
-The reconciliation verdict remains **READY WITH CONDITIONS** until G-002, G-003, and G-004 have implementation evidence and the acceptance criteria pass in an environment with controlled audit retention.
+## نتائج التحقق
 
+- `pnpm check`: ناجح.
+- `pnpm test:unit`: 40 اختباراً ناجحاً في 9 ملفات.
+- `pnpm build`: ناجح؛ تحذيرات متغيرات Analytics غير المعرفة وحجم bundle أكبر من 500KB غير مانعة.
+- اختبار التكامل: `pnpm test:integration` لم يجد ملفات؛ التشغيل المباشر لملفي التجارة والعلاقة فشل في الاختبارات الأربعة قبل أي كتابة بسبب غياب `DATABASE_URL` وعودة `getDb()` بقيمة `null`. لا توجد نتيجة تكامل ناجحة.
+- `drizzle/0016_cit_arch_iam_001.sql`: مولد محلياً ولم يطبق على أي قاعدة.
 
+## بوابة الإصدار
 
-## Transaction Vertical Slice update — 2026-09-06
-
-أُغلق الجزء الحرج من G-001 وG-004 بالنسبة إلى Vertical Slice المنفذ: توجد الآن جداول وخدمات وعقود tRPC وواجهة تشغيلية واختبار تكامل يثبت المسار `Match → RFQ → Quotation → Transaction → Payment Status → Fulfillment → Pickup → In Transit → Delivery → Receipt → Closure` مع مسار Dispute، ورفض الانتقالات غير المسموحة، وعزل Healthcare.
-
-تبقى القيود التالية قبل اعتبار المعاملة جاهزة للإنتاج المفتوح: بوابة دفع فعلية وتسوية مالية، تكامل ناقل خارجي، توقيع إلكتروني قانوني، Policy Engine مركزي موحد بدلاً من حراس متفرقين، idempotency ومفاتيح إعادة المحاولة، إثبات WORM تخزيني غير قابل للحذف خارج قاعدة البيانات، واختبارات تحميل ونسخ احتياطي واستعادة. لذلك يصبح الحكم **MVP تجريبي مغلق — جاهز مشروط**، وليس إطلاقاً تجارياً مفتوحاً.
-
-
-## Policy Engine Update — 2026-09
-
-| Gap | الحالة | الدليل | القيد المتبقي |
-|---|---|---|---|
-| قواعد العمل موزعة داخل خدمات المعاملة | مغلق جزئياً | `server/policyEngine.ts` وربط RFQ/Quotation/Transaction/Fulfillment/Receipt/Closure/Dispute | ما زال الإصدار الأول خادميّاً ثابتاً وليس محرر سياسات إنتاجياً |
-| عدم توحيد قرار allow/deny/manual_review | مغلق | عقد قرار موحد مع policy version وrule IDs والأسباب | يلزم لاحقاً تخزين إصدارات السياسات في قاعدة بيانات مع موافقات |
-| احتمال تمرير manual_review كأنه allow | مغلق | إنفاذ محصور في `allow` واختبار صريح | يلزم اختبار mutation/authorization شامل لكل endpoint جديد |
-| غياب عرض مركزي للسياسات والقرارات | منفذ جزئياً | `PolicyEngineDashboard.tsx` للقراءة والمراجعة | لا يسمح بالتعديل؛ إدارة السياسات الإنتاجية خارج النطاق الحالي |
-
-الحكم: Policy Engine v1 يحسن فصل القواعد وقابلية التدقيق، لكنه لا يساوي منصة إدارة سياسات كاملة حتى تُضاف إصدارات مخزنة، موافقات تغيير، فعالية زمنية، ومحاكاة أثر القاعدة قبل نشرها.
+هذه التغييرات مخصصة للمراجعة عبر Pull Request فقط، وليست تصريحاً للإطلاق أو تطبيق migration. لا يعد الفرع جاهزاً لإنتاج مفتوح إلى أن تُحسم فجوات الملكية وإسناد العضوية والمنح والسياسات المؤجلة، وتنجح اختبارات التكامل على قاعدة اختبار معتمدة، وتُعتمد حوكمة التدقيق والاحتفاظ. لا دمج ولا نشر ضمن هذا النطاق.

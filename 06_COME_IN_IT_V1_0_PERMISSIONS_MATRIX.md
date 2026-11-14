@@ -1,6 +1,6 @@
 # COME IN IT V1.0 — Canonical Permissions Matrix
 
-هذه المصفوفة تصف خط الأساس الكنسي للصلاحيات. **RBAC** يحدد ما يمكن للدور طلبه، بينما **ABAC** يحدد ما إذا كان الطلب صالحًا في السياق.
+هذه المصفوفة تصف خط الأساس الكنسي المستهدف للصلاحيات، ولا تمنح الأدوار إذناً بحد ذاتها في التطبيق. **RBAC** يصف ما يمكن للدور طلبه، بينما **ABAC** يحدد ما إذا كان الطلب صالحًا في السياق. التنفيذ الحالي يستخدم منحاً صريحة مرتبطة بالعضوية؛ انظر قسم حالة التشغيل في نهاية الملف.
 
 | Domain | RBAC action | Required ABAC gates | Visibility / audit |
 |---|---|---|---|
@@ -30,28 +30,38 @@
 | Individual activity holder | submit profile; evaluate; create offering/demand; view decision | KYC, verified individual activity profile, offering verification before matching | C2B and C2C | Own profile scope; relationship evaluation audit |
 | Compliance reviewer | review or suspend activity verification; view relationship audit | Server-side compliance role scope, decision authority, data classification | Review only; not a trade actor | Restricted audit view; no offering/demand creation |
 
-## Relationship decision semantics
+وصف B2G بأنه `manual_review` في صفوف تصميم الأدوار أو العلاقة هو هدف تصميمي فقط؛ لا يوجد مسار مراجعة حكومي تشغيلي في هذا الإصدار، وتُرفض عمليات B2G الحالية افتراضياً (`FORBIDDEN`).
 
-| Relationship mode | Result in current implementation | Required gates | Disallowed or conditional path |
+## Relationship decision semantics — canonical design target
+
+| Relationship mode | Canonical design target (not runtime status) | Required gates | Disallowed or conditional path |
 |---|---|---|---|
-| B2B | `allow` after gates | Both business activities verified, KYC, KYB, active membership, offering verification before matching | Missing activity or trust gate yields `deny` |
-| B2C | `allow` after gates | Verified business activity plus verified consumer activity profile | Missing individual activity yields `deny` |
-| C2B | `allow` after gates | Verified individual producer profile plus verified business activity | Missing business activity yields `deny` |
-| C2C | `allow` after gates | Both individual activity profiles verified | Missing individual activity yields `deny` |
+| B2B | Target: `allow` after gates | Both business activities verified, KYC, KYB, active membership, offering verification before matching | Missing activity or trust gate yields `deny` |
+| B2C | Target: `allow` after gates | Verified business activity plus verified consumer activity profile | Missing individual activity yields `deny` |
+| C2B | Target: `allow` after gates | Verified individual producer profile plus verified business activity | Missing business activity yields `deny` |
+| C2C | Target: `allow` after gates | Both individual activity profiles verified | Missing individual activity yields `deny` |
 | Consumer to Factory or Importer | `deny` | No general consumer supply path exists | Deterministic reason: `consumer_to_factory_not_supported` or `consumer_to_importer_not_supported` |
 | B2G | `manual_review` | Government scope, procurement policy, and separate gateway/integration decision | Outside current operational trade scope |
 
-> A relationship decision is an eligibility decision, not a contract, order, payment, or regulatory approval. Every evaluation must produce a classified audit event, while Healthcare remains structurally and operationally isolated.
+> A relationship decision is an eligibility decision, not a contract, order, payment, or regulatory approval. Every evaluation should produce a classified audit event, while Healthcare remains structurally and operationally isolated.
+
+## Runtime authorization and commerce status — 2026-11-15
+
+- Each sensitive business operation requests an exact code from `BusinessPermissionCode` and checks it against `business_membership_permissions`. The grant must be active and unexpired, and must belong to the exact active membership, user, and requested business context. KYC is required; KYB is required for operations that need a verified business. A membership role alone grants nothing; a `viewer` membership is additionally denied for business operations.
+- Business creation records its creator separately and leaves legal ownership unset. No automatic owner membership is created. No public membership/grant administration API currently exists; until membership and grants are provisioned through an approved process, affected actions fail closed.
+- Runtime trade mutation paths are B2B-only. The purchase-order API requires `buyerBusinessId` and a verified business catalog offering, and reads partner/product/price/MOQ from server-side records. Individual purchase, C2B, C2C and B2G purchase orders are not enabled; government procurement is explicitly denied pending policy approval.
+- Authorization allow/deny decisions are written to `audit_events` with actor, business, membership (when found), membership role in metadata, requested permission and reason code. This is structured application logging, not technically immutable WORM storage. Retention, MFA/session conditions, geographic/classification ABAC, ownership evidence, multiple-owner approvals, and the commercial eligibility rules for individual/government paths remain unresolved.
+- The code supports only the specific KYC/KYB, membership, permission, business status, verified activity/offering and relationship gates actually present in its handlers; the broader ABAC attributes listed above remain design requirements unless separately implemented and tested.
 
 ## Additional ABAC attributes
 
 The permissions matrix must evaluate `individual_activity_status`, `business_activity_status`, `relationship_mode`, `relationship_decision`, `role_scope`, `membership_status`, `offering_verification_status`, `data_classification`, `geography`, and `government_scope` alongside the existing KYC and KYB gates. The interactive platform matrix is an explanatory projection of these rules; enforcement for sensitive operations remains server-side.
 
-## Non-negotiable rules
+## Non-negotiable design requirements — not a claim of complete runtime enforcement
 
 1. إنشاء الحساب لا يثبت الهوية التجارية.
 2. لا يوجد تفاعل B2B قبل استيفاء KYC وKYB وMembership وOffering Verification.
 3. لا تكشف علاقة تجارية بيانات المشتري الفردية خارج نطاق الرؤية المصرح به.
 4. كل رفض أو تعليق أو إلغاء أو تصدير يولد Audit Event.
 5. لا يسمح ملف مستهلك فردي بمسار Consumer → Factory أو Consumer → Importer.
-6. B2G لا يتحول إلى تفاعل تشغيلي من المصفوفة؛ نتيجته `manual_review` حتى يكتمل نطاق حكومي منفصل.
+6. هدف التصميم لـB2G هو `manual_review` بعد اعتماد نطاق حكومي منفصل؛ أما التنفيذ الحالي فيرفض التشغيل ولا يملك مسار مراجعة.
