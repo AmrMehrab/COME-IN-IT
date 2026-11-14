@@ -428,7 +428,7 @@ export const healthRecordReferences = mysqlTable(
       columns: [table.amendsRecordId],
       foreignColumns: [table.id],
       name: "health_record_refs_amends_fk",
-    }).onDelete("restrict"),
+    }).onDelete("set null"),
     index("health_record_references_profile_idx").on(table.healthProfileId),
     index("health_record_references_provider_idx").on(table.sourceProviderId),
     index("health_record_references_status_idx").on(table.provenanceStatus),
