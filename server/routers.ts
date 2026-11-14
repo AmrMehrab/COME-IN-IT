@@ -76,17 +76,11 @@ export const appRouter = router({
 
   commerceOrders: router({
     list: protectedProcedure.query(({ ctx }) => db.listCommercePurchaseOrdersForUser(ctx.user.id)),
+    catalog: protectedProcedure.query(({ ctx }) => db.listVerifiedCommerceCatalogForUser(ctx.user.id)),
     create: protectedProcedure
       .input(z.object({
-        partnerKey: z.string().trim().min(2).max(120),
-        partnerName: z.string().trim().min(2).max(255),
-        productKey: z.string().trim().min(2).max(120),
-        productName: z.string().trim().min(2).max(255),
-        category: z.string().trim().min(2).max(120),
+        offeringId: z.number().int().positive(),
         quantity: z.number().int().positive(),
-        quantityUnit: z.string().trim().min(1).max(32),
-        moq: z.number().int().positive(),
-        unitPriceMinor: z.number().int().nonnegative(),
         message: z.string().trim().min(5).max(4_000),
       }))
       .mutation(({ ctx, input }) => db.createCommercePurchaseOrderForUser(ctx.user.id, input)),

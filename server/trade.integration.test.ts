@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   createBusinessEntityForUser,
+  createCommercePurchaseOrderForUser,
   acceptTradeDeliveryForUser,
   acceptTradeQuotationForUser,
   advanceTradeTransportForUser,
@@ -28,6 +29,7 @@ import {
   auditEvents,
   businessActivityVerifications,
   businessEntities,
+  commercePurchaseOrders,
   kybVerifications,
   tradeDemands,
   tradeMatches,
@@ -68,6 +70,7 @@ describe("trade operations foundation", () => {
     let supplierBusinessId: number | undefined;
     let buyerBusinessId: number | undefined;
     let offeringId: number | undefined;
+    let orderId: number | undefined;
     let pendingDemandId: number | undefined;
     let eligibleDemandId: number | undefined;
 
@@ -120,6 +123,14 @@ describe("trade operations foundation", () => {
       offeringId = offering.id;
       expect(offering.verificationStatus).toBe("pending");
 
+      await expect(
+        createCommercePurchaseOrderForUser(buyerUserId, {
+          offeringId: 999_999_999,
+          quantity: 100,
+          message: "Should be rejected",
+        }),
+      ).rejects.toThrow("verified and published product offering");
+
       const pendingDemand = await createTradeDemandForUser(buyerUserId, {
         businessId: buyerBusinessId,
         demandType: "product",
@@ -132,6 +143,20 @@ describe("trade operations foundation", () => {
       expect(ineligibleMatch.decisionReason).toContain("offering_not_independently_verified_and_published");
 
       await reviewTradeOffering(adminUserId, offeringId, "verified");
+      await database
+        .update(tradeOfferings)
+        .set({ unitPriceMinor: 1250, minimumOrderQuantity: 10, quantityUnit: "piece", lifecycleStatus: "published" })
+        .where(eq(tradeOfferings.id, offeringId));
+      const createdOrder = await createCommercePurchaseOrderForUser(buyerUserId, {
+        offeringId,
+        quantity: 25,
+        message: "Use server-side commercial terms",
+      });
+      orderId = createdOrder.id;
+      expect(createdOrder.supplierBusinessId).toBe(supplierBusinessId);
+      expect(createdOrder.offeringId).toBe(offeringId);
+      expect(createdOrder.unitPriceMinor).toBe(1250);
+      expect(createdOrder.moq).toBe(10);
       const eligibleDemand = await createTradeDemandForUser(buyerUserId, {
         businessId: buyerBusinessId,
         demandType: "product",
@@ -152,6 +177,7 @@ describe("trade operations foundation", () => {
     } finally {
       if (pendingDemandId) await database.delete(tradeMatches).where(eq(tradeMatches.demandId, pendingDemandId));
       if (eligibleDemandId) await database.delete(tradeMatches).where(eq(tradeMatches.demandId, eligibleDemandId));
+      if (orderId) await database.delete(commercePurchaseOrders).where(eq(commercePurchaseOrders.id, orderId));
       if (pendingDemandId) await database.delete(tradeDemands).where(eq(tradeDemands.id, pendingDemandId));
       if (eligibleDemandId) await database.delete(tradeDemands).where(eq(tradeDemands.id, eligibleDemandId));
       if (offeringId) await database.delete(tradeOfferings).where(eq(tradeOfferings.id, offeringId));

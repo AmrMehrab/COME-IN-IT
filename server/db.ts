@@ -208,15 +208,8 @@ export async function toggleSpecificationBookmark(userId: number, sectionId: num
 }
 
 type CommercePurchaseOrderInput = {
-  partnerKey: string;
-  partnerName: string;
-  productKey: string;
-  productName: string;
-  category: string;
+  offeringId: number;
   quantity: number;
-  quantityUnit: string;
-  moq: number;
-  unitPriceMinor: number;
   message: string;
 };
 
@@ -225,24 +218,110 @@ export async function listCommercePurchaseOrdersForUser(userId: number) {
   return db.select().from(commercePurchaseOrders).where(eq(commercePurchaseOrders.buyerUserId, userId)).orderBy(desc(commercePurchaseOrders.createdAt));
 }
 
+export async function listVerifiedCommerceCatalogForUser(userId: number) {
+  const db = requireDatabase(await getDb());
+  const person = await getOrCreatePersonForUser(userId);
+  if (person.kycStatus !== "verified") return [];
+
+  const offerings = await db
+    .select({
+      offeringId: tradeOfferings.id,
+      supplierBusinessId: businessEntities.id,
+      partnerName: businessEntities.legalName,
+      productName: tradeOfferings.title,
+      category: tradeOfferings.categoryCode,
+      quantityUnit: tradeOfferings.quantityUnit,
+      moq: tradeOfferings.minimumOrderQuantity,
+      unitPriceMinor: tradeOfferings.unitPriceMinor,
+      offeringType: tradeOfferings.offeringType,
+    })
+    .from(tradeOfferings)
+    .innerJoin(businessEntities, eq(tradeOfferings.businessId, businessEntities.id))
+    .where(
+      and(
+        eq(tradeOfferings.supplierKind, "business"),
+        eq(tradeOfferings.offeringType, "product"),
+        eq(tradeOfferings.verificationStatus, "verified"),
+        eq(tradeOfferings.lifecycleStatus, "published"),
+        eq(businessEntities.verificationStatus, "verified"),
+      ),
+    )
+    .orderBy(desc(tradeOfferings.updatedAt), desc(tradeOfferings.id));
+
+  const catalog = [];
+  for (const offering of offerings) {
+    if (offering.moq === null || offering.unitPriceMinor === null || offering.quantityUnit === null) continue;
+    const activities = await listCurrentVerifiedBusinessActivities(offering.supplierBusinessId);
+    if (!activities.some(activity => businessActivitySupportsOffering(activity, offering.offeringType))) continue;
+    catalog.push(offering);
+  }
+  return catalog;
+}
+
 export async function createCommercePurchaseOrderForUser(userId: number, input: CommercePurchaseOrderInput) {
   const db = requireDatabase(await getDb());
-  if (input.quantity < input.moq) throw new Error(`الكمية يجب ألا تقل عن MOQ (${input.moq})`);
+  const person = await getOrCreatePersonForUser(userId);
+  if (person.kycStatus !== "verified") throw new Error("A verified KYC identity is required before creating a purchase order");
+
+  const offering = await db
+    .select({
+      offeringId: tradeOfferings.id,
+      supplierBusinessId: businessEntities.id,
+      partnerName: businessEntities.legalName,
+      productName: tradeOfferings.title,
+      category: tradeOfferings.categoryCode,
+      quantityUnit: tradeOfferings.quantityUnit,
+      moq: tradeOfferings.minimumOrderQuantity,
+      unitPriceMinor: tradeOfferings.unitPriceMinor,
+      offeringType: tradeOfferings.offeringType,
+      businessStatus: businessEntities.verificationStatus,
+      offeringStatus: tradeOfferings.verificationStatus,
+      lifecycleStatus: tradeOfferings.lifecycleStatus,
+      supplierKind: tradeOfferings.supplierKind,
+    })
+    .from(tradeOfferings)
+    .innerJoin(businessEntities, eq(tradeOfferings.businessId, businessEntities.id))
+    .where(eq(tradeOfferings.id, input.offeringId))
+    .limit(1);
+
+  const selected = offering[0];
+  if (
+    !selected ||
+    selected.supplierKind !== "business" ||
+    selected.offeringType !== "product" ||
+    selected.businessStatus !== "verified" ||
+    selected.offeringStatus !== "verified" ||
+    selected.lifecycleStatus !== "published" ||
+    selected.moq === null ||
+    selected.unitPriceMinor === null ||
+    selected.quantityUnit === null
+  ) {
+    throw new Error("Purchase orders require a verified and published product offering with approved commercial terms");
+  }
+
+  const activities = await listCurrentVerifiedBusinessActivities(selected.supplierBusinessId);
+  if (!activities.some(activity => businessActivitySupportsOffering(activity, selected.offeringType))) {
+    throw new Error("The supplier has no verified operational activity for this product");
+  }
+  if (input.quantity < selected.moq) throw new Error(`الكمية يجب ألا تقل عن MOQ (${selected.moq})`);
+
   const inserted = await db.insert(commercePurchaseOrders).values({
     buyerUserId: userId,
-    partnerKey: input.partnerKey,
-    partnerName: input.partnerName,
-    productKey: input.productKey,
-    productName: input.productName,
-    category: input.category,
+    supplierBusinessId: selected.supplierBusinessId,
+    offeringId: selected.offeringId,
+    partnerKey: String(selected.supplierBusinessId),
+    partnerName: selected.partnerName,
+    productKey: String(selected.offeringId),
+    productName: selected.productName,
+    category: selected.category ?? selected.offeringType,
     quantity: input.quantity,
-    quantityUnit: input.quantityUnit,
-    moq: input.moq,
-    unitPriceMinor: input.unitPriceMinor,
+    quantityUnit: selected.quantityUnit,
+    moq: selected.moq,
+    unitPriceMinor: selected.unitPriceMinor,
     message: input.message,
   });
   const orderId = Number(inserted[0].insertId);
-  await appendAuditEvent({ actorUserId: userId, action: "commerce_purchase_order_created", resourceType: "commerce_purchase_order", resourceId: String(orderId), metadata: { partnerKey: input.partnerKey, productKey: input.productKey, quantity: input.quantity } });
+  await appendAuditEvent({ actorUserId: userId, action: "commerce_purchase_order_created", resourceType: "commerce_purchase_order", resourceId: String(orderId), metadata: { supplierBusinessId: selected.supplierBusinessId, offeringId: selected.offeringId, quantity: input.quantity } });
   const created = await db.select().from(commercePurchaseOrders).where(eq(commercePurchaseOrders.id, orderId)).limit(1);
   if (!created[0]) throw new Error("تعذر تحميل أمر الشراء بعد الحفظ");
   return created[0];

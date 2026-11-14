@@ -656,6 +656,9 @@ export const tradeOfferings = mysqlTable(
     offeringType: mysqlEnum("offeringType", ["product", "service", "used_asset"]).notNull(),
     title: varchar("title", { length: 255 }).notNull(),
     categoryCode: varchar("categoryCode", { length: 100 }),
+    unitPriceMinor: int("unitPriceMinor"),
+    minimumOrderQuantity: int("minimumOrderQuantity"),
+    quantityUnit: varchar("quantityUnit", { length: 32 }),
     descriptionJson: text("descriptionJson"),
     dataClassification: mysqlEnum("dataClassification", [
       "public",
@@ -700,6 +703,8 @@ export const commercePurchaseOrders = mysqlTable(
   {
     id: int("id").autoincrement().primaryKey(),
     buyerUserId: int("buyerUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
+    supplierBusinessId: int("supplierBusinessId"),
+    offeringId: int("offeringId"),
     partnerKey: varchar("partnerKey", { length: 120 }).notNull(),
     partnerName: varchar("partnerName", { length: 255 }).notNull(),
     productKey: varchar("productKey", { length: 120 }).notNull(),
@@ -715,7 +720,21 @@ export const commercePurchaseOrders = mysqlTable(
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  table => [index("commerce_orders_buyer_idx").on(table.buyerUserId), index("commerce_orders_partner_idx").on(table.partnerKey), index("commerce_orders_status_idx").on(table.status)],
+  table => [
+    foreignKey({
+      columns: [table.supplierBusinessId],
+      foreignColumns: [businessEntities.id],
+      name: "commerce_order_supplier_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.offeringId],
+      foreignColumns: [tradeOfferings.id],
+      name: "commerce_order_offering_fk",
+    }).onDelete("restrict"),
+    index("commerce_orders_buyer_idx").on(table.buyerUserId),
+    index("commerce_orders_partner_idx").on(table.partnerKey),
+    index("commerce_orders_status_idx").on(table.status),
+  ],
 );
 
 /** A trust-gated B2B demand that may be evaluated against verified offerings. */

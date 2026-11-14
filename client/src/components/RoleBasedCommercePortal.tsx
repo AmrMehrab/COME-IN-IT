@@ -124,16 +124,14 @@ export function RoleBasedCommercePortal() {
       toast.error("سجّل الدخول أولاً لحفظ أمر الشراء في قاعدة البيانات.");
       return;
     }
+    const offeringId = Number(selectedProduct.id);
+    if (!Number.isInteger(offeringId) || offeringId <= 0) {
+      toast.error("هذا عرض تجريبي غير مرتبط بكتالوج تجاري موثق. لا يمكن إنشاء أمر شراء منه.");
+      return;
+    }
     createOrderMutation.mutate({
-      partnerKey: selectedPartner.id,
-      partnerName: selectedPartner.name,
-      productKey: selectedProduct.id,
-      productName: selectedProduct.name,
-      category: selectedProduct.category,
+      offeringId,
       quantity: Number(quantity),
-      quantityUnit: selectedProduct.unit,
-      moq: selectedProduct.moq,
-      unitPriceMinor: selectedProduct.price * 100,
       message,
     });
   };
