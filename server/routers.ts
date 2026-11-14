@@ -264,8 +264,9 @@ export const appRouter = router({
         .input(z.object({
           transactionId: z.number().int().positive(),
           paymentStatus: z.enum(["cash_pending", "bank_transfer_pending", "credit_terms", "external_recorded", "settled"]),
+          proofReference: referenceField,
         }))
-        .mutation(({ ctx, input }) => db.updateTradeTransactionPaymentForUser(ctx.user.id, input.transactionId, input.paymentStatus)),
+        .mutation(({ ctx, input }) => db.updateTradeTransactionPaymentForUser(ctx.user.id, input.transactionId, input.paymentStatus, input.proofReference)),
       assignTransport: protectedProcedure
         .input(z.object({
           transactionId: z.number().int().positive(),

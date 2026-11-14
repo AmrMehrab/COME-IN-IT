@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, desc, eq, ne, or } from "drizzle-orm";
+import { and, desc, eq, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   auditEvents,
@@ -125,6 +125,32 @@ function requireDatabase<T>(database: T | null): T {
     throw new Error("Database connection is not available");
   }
   return database;
+}
+
+function isCurrentlyVerified(status: string | null | undefined, expiresAt: Date | null | undefined) {
+  return status === "verified" && (!expiresAt || expiresAt > new Date());
+}
+
+async function getCurrentKycForPerson(personId: number) {
+  const db = requireDatabase(await getDb());
+  const rows = await db
+    .select({ status: kycVerifications.status, expiresAt: kycVerifications.expiresAt })
+    .from(kycVerifications)
+    .where(eq(kycVerifications.personId, personId))
+    .orderBy(desc(kycVerifications.submittedAt), desc(kycVerifications.id))
+    .limit(1);
+  return rows[0];
+}
+
+async function getCurrentKybForBusiness(businessId: number) {
+  const db = requireDatabase(await getDb());
+  const rows = await db
+    .select({ status: kybVerifications.status, expiresAt: kybVerifications.expiresAt })
+    .from(kybVerifications)
+    .where(eq(kybVerifications.businessId, businessId))
+    .orderBy(desc(kybVerifications.submittedAt), desc(kybVerifications.id))
+    .limit(1);
+  return rows[0];
 }
 
 async function assertAdminOrOwner(userId: number) {
@@ -375,7 +401,8 @@ export async function listBusinessEntitiesForUser(userId: number) {
 export async function createBusinessEntityForUser(userId: number, input: BusinessEntityInput) {
   const db = requireDatabase(await getDb());
   const person = await getOrCreatePersonForUser(userId);
-  if (person.kycStatus !== "verified") {
+  const currentKyc = await getCurrentKycForPerson(person.id);
+  if (!currentKyc || !isCurrentlyVerified(currentKyc.status, currentKyc.expiresAt)) {
     throw new Error("A verified KYC identity is required before creating a business entity");
   }
   const inserted = await db.insert(businessEntities).values({
@@ -436,12 +463,27 @@ export async function updateBusinessEntityForUser(
   if (!membership[0]) throw new Error("You do not have permission to update this business entity");
   if (Object.keys(input).length === 0) throw new Error("No business fields were provided for update");
 
+  const changesLegalIdentity = input.legalName !== undefined || input.entityType !== undefined;
+  if (changesLegalIdentity && membership[0].membershipRole !== "owner") {
+    throw new Error("Only the business owner may update legal identity fields");
+  }
+  const before = await db.select().from(businessEntities).where(eq(businessEntities.id, businessId)).limit(1);
+  if (!before[0]) throw new Error("Business entity was not found");
+
   await db.update(businessEntities).set(input).where(eq(businessEntities.id, businessId));
+  if (changesLegalIdentity) {
+    await db.update(businessEntities).set({ verificationStatus: "pending" }).where(eq(businessEntities.id, businessId));
+  }
   await appendAuditEvent({
     actorUserId: userId,
     action: "business_entity_updated",
     resourceType: "business_entity",
     resourceId: String(businessId),
+    metadata: {
+      previous: JSON.stringify({ legalName: before[0].legalName, entityType: before[0].entityType }),
+      next: JSON.stringify(input),
+      requiresKybReview: changesLegalIdentity,
+    },
   });
 
   const updated = await db.select().from(businessEntities).where(eq(businessEntities.id, businessId)).limit(1);
@@ -908,7 +950,8 @@ type RelationshipEvaluation = {
 async function assertVerifiedTradeEligibility(userId: number, businessId: number) {
   const db = requireDatabase(await getDb());
   const person = await getOrCreatePersonForUser(userId);
-  if (person.kycStatus !== "verified") {
+  const currentKyc = await getCurrentKycForPerson(person.id);
+  if (!currentKyc || !isCurrentlyVerified(currentKyc.status, currentKyc.expiresAt)) {
     throw new Error("A verified KYC identity is required before trade access");
   }
 
@@ -930,7 +973,8 @@ async function assertVerifiedTradeEligibility(userId: number, businessId: number
   if (!membership[0]) {
     throw new Error("An active authorised business membership is required for trade access");
   }
-  if (membership[0].businessStatus !== "verified") {
+  const currentKyb = await getCurrentKybForBusiness(businessId);
+  if (membership[0].businessStatus !== "verified" || !currentKyb || !isCurrentlyVerified(currentKyb.status, currentKyb.expiresAt)) {
     throw new Error("A verified KYB business is required for trade access");
   }
   return { personId: person.id, membershipRole: membership[0].role };
@@ -1226,7 +1270,8 @@ async function assertVerifiedIndividualActivityProfileForUser(
 ) {
   const db = requireDatabase(await getDb());
   const person = await getOrCreatePersonForUser(userId);
-  if (person.kycStatus !== "verified") {
+  const currentKyc = await getCurrentKycForPerson(person.id);
+  if (!currentKyc || !isCurrentlyVerified(currentKyc.status, currentKyc.expiresAt)) {
     throw new Error("A verified KYC identity is required before commercial access");
   }
   const profile = await db
@@ -1577,6 +1622,9 @@ export async function evaluateTradeMatchForUser(userId: number, demandId: number
   const db = requireDatabase(await getDb());
   const demand = await db.select().from(tradeDemands).where(eq(tradeDemands.id, demandId)).limit(1);
   if (!demand[0]) throw new Error("Trade demand was not found");
+  if (demand[0].status !== "published" && demand[0].status !== "matching") {
+    throw new Error("Only published or actively matching demands can be evaluated");
+  }
   if (demand[0].requesterKind === "business") {
     if (!demand[0].requesterBusinessId) throw new Error("Business demand is missing its requester identity");
     await assertVerifiedBusinessOperationalActivityForUser(userId, demand[0].requesterBusinessId);
@@ -1790,6 +1838,8 @@ export async function createTradeRfqForUser(
   const match = await db.select().from(tradeMatches).where(eq(tradeMatches.id, input.matchId)).limit(1);
   if (!match[0] || match[0].status !== "eligible") throw new Error("RFQ requires an eligible trade match");
   const demand = await assertTradeDemandController(userId, match[0].demandId);
+  if (!["published", "matching"].includes(demand.status)) throw new Error("RFQ requires an active published demand");
+  if (input.validUntil && input.validUntil <= new Date()) throw new Error("RFQ validity must be in the future");
   const offeringRows = await db.select().from(tradeOfferings).where(eq(tradeOfferings.id, match[0].offeringId)).limit(1);
   const offering = offeringRows[0];
   if (!offering || offering.verificationStatus !== "verified" || offering.lifecycleStatus !== "published") throw new Error("RFQ requires a verified and published offering");
@@ -1827,6 +1877,11 @@ export async function submitTradeQuotationForUser(
   if (input.quantity <= 0 || input.unitPriceMinor < 0 || input.leadTimeDays < 0) throw new Error("Quotation commercial values are invalid");
   const rfq = await db.select().from(tradeRfqs).where(eq(tradeRfqs.id, input.rfqId)).limit(1);
   if (!rfq[0] || !["open", "quoted"].includes(rfq[0].status)) throw new Error("RFQ is not open for quotations");
+  if (rfq[0].validUntil && rfq[0].validUntil <= new Date()) throw new Error("RFQ has expired");
+  if (input.validUntil && input.validUntil <= new Date()) throw new Error("Quotation validity must be in the future");
+  if (input.quantity > rfq[0].requestedQuantity) throw new Error("Quotation quantity cannot exceed the requested quantity");
+  if (input.currencyCode && input.currencyCode !== "EGP") throw new Error("Quotation currency must match the supported transaction currency");
+  if (input.validUntil && rfq[0].validUntil && input.validUntil > rfq[0].validUntil) throw new Error("Quotation cannot outlive the RFQ");
   const match = await db.select().from(tradeMatches).where(eq(tradeMatches.id, rfq[0].matchId)).limit(1);
   if (!match[0] || match[0].status !== "eligible") throw new Error("Quotation requires an eligible match");
   await assertTradeOfferingController(userId, match[0].offeringId);
@@ -1885,6 +1940,16 @@ export async function acceptTradeQuotationForUser(userId: number, quotationId: n
   });
   const totalPriceMinor = quotation[0].quantity * quotation[0].unitPriceMinor;
   const transaction = await db.transaction(async tx => {
+    const rfqUpdate = await tx
+      .update(tradeRfqs)
+      .set({ status: "accepted" })
+      .where(and(eq(tradeRfqs.id, rfq[0].id), or(eq(tradeRfqs.status, "open"), eq(tradeRfqs.status, "quoted"))));
+    if (Number((rfqUpdate as any)[0]?.affectedRows ?? 0) !== 1) throw new Error("RFQ was accepted concurrently");
+    const quotationUpdate = await tx
+      .update(tradeQuotations)
+      .set({ status: "accepted" })
+      .where(and(eq(tradeQuotations.id, quotationId), or(eq(tradeQuotations.status, "submitted"), eq(tradeQuotations.status, "countered"))));
+    if (Number((quotationUpdate as any)[0]?.affectedRows ?? 0) !== 1) throw new Error("Quotation was accepted concurrently");
     const inserted = await tx.insert(tradeTransactions).values({
       rfqId: rfq[0].id,
       quotationId: quotation[0].id,
@@ -1908,8 +1973,6 @@ export async function acceptTradeQuotationForUser(userId: number, quotationId: n
       ownerIndividualProfileId: demand.requesterIndividualProfileId,
     });
     const transactionId = Number(inserted[0].insertId);
-    await tx.update(tradeQuotations).set({ status: "accepted" }).where(eq(tradeQuotations.id, quotationId));
-    await tx.update(tradeRfqs).set({ status: "accepted" }).where(eq(tradeRfqs.id, rfq[0].id));
     return transactionId;
   });
   await appendAuditEvent({ actorUserId: userId, action: "trade_transaction_accepted", resourceType: "trade_transaction", resourceId: String(transaction), dataClassification: "verified", metadata: { quotationId, rfqId: rfq[0].id, matchId: match[0].id, totalPriceMinor } });
@@ -1918,7 +1981,7 @@ export async function acceptTradeQuotationForUser(userId: number, quotationId: n
   return created[0];
 }
 
-export async function updateTradeTransactionPaymentForUser(userId: number, transactionId: number, paymentStatus: "cash_pending" | "bank_transfer_pending" | "credit_terms" | "external_recorded" | "settled") {
+export async function updateTradeTransactionPaymentForUser(userId: number, transactionId: number, paymentStatus: "cash_pending" | "bank_transfer_pending" | "credit_terms" | "external_recorded" | "settled", proofReference?: string) {
   const db = requireDatabase(await getDb());
   const transaction = await assertTradeTransactionParticipant(userId, transactionId);
   const actor = await getTradeTransactionActorCapabilities(userId, transaction);
@@ -1934,12 +1997,21 @@ export async function updateTradeTransactionPaymentForUser(userId: number, trans
   if (!allowedTransitions[transaction.paymentStatus]?.includes(paymentStatus)) {
     throw new Error(`Payment transition from ${transaction.paymentStatus} to ${paymentStatus} is not allowed`);
   }
+  if ((paymentStatus === "settled" || paymentStatus === "external_recorded") && !proofReference?.trim()) {
+    throw new Error("A payment proof reference is required before recording this payment status");
+  }
   await enforceTradePolicy(userId, "trade.payment.update", "trade_transaction", String(transactionId), {
     actorIsParticipant: true,
     transactionStatus: transaction.status,
   });
   if (transaction.status === "closed" || transaction.status === "cancelled") throw new Error("Closed or cancelled transactions cannot change payment status");
-  await db.update(tradeTransactions).set({ paymentStatus }).where(eq(tradeTransactions.id, transactionId));
+  await db.transaction(async tx => {
+    const updated = await tx.update(tradeTransactions).set({ paymentStatus }).where(and(eq(tradeTransactions.id, transactionId), eq(tradeTransactions.paymentStatus, transaction.paymentStatus)));
+    if (Number((updated as any)[0]?.affectedRows ?? 0) !== 1) throw new Error("Payment status was updated concurrently");
+    if (proofReference?.trim()) {
+      await tx.insert(transactionEvidence).values({ transactionId, createdByUserId: userId, evidenceType: "receipt", reference: proofReference.trim() });
+    }
+  });
   await appendAuditEvent({ actorUserId: userId, action: "trade_payment_status_updated", resourceType: "trade_transaction", resourceId: String(transactionId), dataClassification: "verified", metadata: { paymentStatus } });
   return { transactionId, paymentStatus };
 }
@@ -1978,8 +2050,12 @@ export async function advanceTradeTransportForUser(userId: number, jobId: number
     transportStatus: job[0].status,
     requestedTransition: status,
   });
-  await db.update(transportJobs).set({ status, pickupAt: status === "picked_up" ? new Date() : undefined }).where(eq(transportJobs.id, jobId));
-  await db.update(tradeTransactions).set({ status: status === "in_transit" ? "in_transit" : "ready_for_pickup" }).where(eq(tradeTransactions.id, job[0].transactionId));
+  await db.transaction(async tx => {
+    const jobUpdate = await tx.update(transportJobs).set({ status, pickupAt: status === "picked_up" ? new Date() : undefined }).where(and(eq(transportJobs.id, jobId), eq(transportJobs.status, job[0].status)));
+    if (Number((jobUpdate as any)[0]?.affectedRows ?? 0) !== 1) throw new Error("Transport job was updated concurrently");
+    const transactionUpdate = await tx.update(tradeTransactions).set({ status: status === "in_transit" ? "in_transit" : "ready_for_pickup" }).where(and(eq(tradeTransactions.id, job[0].transactionId), eq(tradeTransactions.status, transaction.status)));
+    if (Number((transactionUpdate as any)[0]?.affectedRows ?? 0) !== 1) throw new Error("Trade transaction was updated concurrently");
+  });
   await appendAuditEvent({ actorUserId: userId, action: "trade_transport_advanced", resourceType: "transport_job", resourceId: String(jobId), dataClassification: "verified", metadata: { transactionId: job[0].transactionId, status } });
   return { jobId, transactionId: job[0].transactionId, status };
 }
@@ -1989,19 +2065,27 @@ export async function recordTradeDeliveryForUser(userId: number, input: { transa
   const transaction = await assertTradeTransactionParticipant(userId, input.transactionId);
   const actor = await getTradeTransactionActorCapabilities(userId, transaction);
   if (!actor.actorIsCustodian) throw new Error("Only the assigned transport custodian may record delivery");
-  if (input.deliveredQuantity > transaction.quantity) throw new Error("Delivered quantity cannot exceed the transaction quantity");
-  if (!["in_transit", "ready_for_pickup"].includes(transaction.status)) throw new Error("Delivery requires an in-transit transaction");
+  if (!["in_transit", "ready_for_pickup", "delivered"].includes(transaction.status)) throw new Error("Delivery requires an in-transit transaction");
   const job = await db.select().from(transportJobs).where(and(eq(transportJobs.id, input.transportJobId), eq(transportJobs.transactionId, input.transactionId))).limit(1);
-  if (!job[0] || job[0].status !== "in_transit") throw new Error("Delivery requires the assigned transport job to be in transit");
+  if (!job[0] || !["in_transit", "delivered"].includes(job[0].status)) throw new Error("Delivery requires the assigned transport job to be in transit");
   await enforceTradePolicy(userId, "trade.delivery.record", "transaction_delivery", `transaction:${input.transactionId}`, {
     actorIsParticipant: true,
     transactionStatus: transaction.status,
     deliveryTransactionMatches: true,
   });
-  const inserted = await db.insert(transactionDeliveries).values({ transactionId: input.transactionId, transportJobId: input.transportJobId, deliveredQuantity: input.deliveredQuantity, acceptanceStatus: "pending", proofReference: input.proofReference, notes: input.notes ?? null, deliveredAt: new Date() });
-  const deliveryId = Number(inserted[0].insertId);
-  await db.update(transportJobs).set({ status: "delivered", deliveryAt: new Date() }).where(eq(transportJobs.id, input.transportJobId));
-  await db.update(tradeTransactions).set({ status: "delivered" }).where(eq(tradeTransactions.id, input.transactionId));
+  const deliveryId = await db.transaction(async tx => {
+    const duplicate = await tx.select({ id: transactionDeliveries.id }).from(transactionDeliveries).where(and(eq(transactionDeliveries.transactionId, input.transactionId), eq(transactionDeliveries.transportJobId, input.transportJobId), eq(transactionDeliveries.proofReference, input.proofReference))).limit(1);
+    if (duplicate[0]) throw new Error("This delivery proof has already been recorded");
+    const totals = await tx.select({ total: sql<number>`COALESCE(SUM(${transactionDeliveries.deliveredQuantity}), 0)` }).from(transactionDeliveries).where(eq(transactionDeliveries.transactionId, input.transactionId));
+    const deliveredSoFar = Number(totals[0]?.total ?? 0);
+    if (deliveredSoFar + input.deliveredQuantity > transaction.quantity) throw new Error("Delivered quantity cannot exceed the transaction quantity");
+    const jobUpdate = await tx.update(transportJobs).set({ status: "delivered", deliveryAt: new Date() }).where(and(eq(transportJobs.id, input.transportJobId), or(eq(transportJobs.status, "in_transit"), eq(transportJobs.status, "delivered"))));
+    if (Number((jobUpdate as any)[0]?.affectedRows ?? 0) !== 1) throw new Error("Transport delivery was recorded concurrently");
+    const inserted = await tx.insert(transactionDeliveries).values({ transactionId: input.transactionId, transportJobId: input.transportJobId, deliveredQuantity: input.deliveredQuantity, acceptanceStatus: "pending", proofReference: input.proofReference, notes: input.notes ?? null, deliveredAt: new Date() });
+    const updated = await tx.update(tradeTransactions).set({ status: "delivered" }).where(and(eq(tradeTransactions.id, input.transactionId), or(eq(tradeTransactions.status, "in_transit"), eq(tradeTransactions.status, "ready_for_pickup"), eq(tradeTransactions.status, "delivered"))));
+    if (Number((updated as any)[0]?.affectedRows ?? 0) !== 1) throw new Error("Trade delivery state was updated concurrently");
+    return Number(inserted[0].insertId);
+  });
   await appendAuditEvent({ actorUserId: userId, action: "trade_delivery_recorded", resourceType: "transaction_delivery", resourceId: String(deliveryId), dataClassification: "verified", metadata: { transactionId: input.transactionId, transportJobId: input.transportJobId, deliveredQuantity: input.deliveredQuantity } });
   return { deliveryId, transactionId: input.transactionId, status: "delivered" as const };
 }
@@ -2019,13 +2103,13 @@ export async function acceptTradeDeliveryForUser(userId: number, deliveryId: num
     transactionStatus: transaction.status,
   });
   if (transaction.status !== "delivered") throw new Error("Only delivered transactions can be received");
-  if (acceptanceStatus === "accepted_full" || acceptanceStatus === "accepted_partial") {
-    await db.update(transactionDeliveries).set({ acceptanceStatus, receivedByUserId: userId, receivedAt: new Date(), notes: notes ?? delivery[0].notes }).where(eq(transactionDeliveries.id, deliveryId));
-    await db.update(tradeTransactions).set({ status: "received" }).where(eq(tradeTransactions.id, transaction.id));
-  } else {
-    await db.update(transactionDeliveries).set({ acceptanceStatus, receivedByUserId: userId, receivedAt: new Date(), notes: notes ?? delivery[0].notes }).where(eq(transactionDeliveries.id, deliveryId));
-    await db.update(tradeTransactions).set({ status: "disputed" }).where(eq(tradeTransactions.id, transaction.id));
-  }
+  await db.transaction(async tx => {
+    const deliveryUpdate = await tx.update(transactionDeliveries).set({ acceptanceStatus, receivedByUserId: userId, receivedAt: new Date(), notes: notes ?? delivery[0].notes }).where(and(eq(transactionDeliveries.id, deliveryId), eq(transactionDeliveries.acceptanceStatus, "pending")));
+    if (Number((deliveryUpdate as any)[0]?.affectedRows ?? 0) !== 1) throw new Error("This delivery has already been accepted");
+    const nextStatus = acceptanceStatus === "accepted_full" || acceptanceStatus === "accepted_partial" ? "received" : "disputed";
+    const transactionUpdate = await tx.update(tradeTransactions).set({ status: nextStatus }).where(and(eq(tradeTransactions.id, transaction.id), eq(tradeTransactions.status, "delivered")));
+    if (Number((transactionUpdate as any)[0]?.affectedRows ?? 0) !== 1) throw new Error("Trade transaction was already received or disputed");
+  });
   await appendAuditEvent({ actorUserId: userId, action: "trade_delivery_received", resourceType: "transaction_delivery", resourceId: String(deliveryId), dataClassification: "verified", metadata: { transactionId: transaction.id, acceptanceStatus } });
   return { deliveryId, transactionId: transaction.id, acceptanceStatus };
 }
@@ -2043,8 +2127,11 @@ export async function closeTradeTransactionForUser(userId: number, transactionId
   });
   if (transaction.status !== "received") throw new Error("Transaction must be received before closure");
   if (!["settled", "external_recorded", "credit_terms"].includes(transaction.paymentStatus)) throw new Error("Transaction payment must be settled, externally recorded, or under approved credit terms");
-  await db.update(tradeTransactions).set({ status: "closed", closedAt: new Date() }).where(eq(tradeTransactions.id, transactionId));
-  await db.update(tradeDemands).set({ status: "fulfilled" }).where(eq(tradeDemands.id, transaction.demandId));
+  await db.transaction(async tx => {
+    const updated = await tx.update(tradeTransactions).set({ status: "closed", closedAt: new Date() }).where(and(eq(tradeTransactions.id, transactionId), eq(tradeTransactions.status, "received")));
+    if (Number((updated as any)[0]?.affectedRows ?? 0) !== 1) throw new Error("Transaction was already closed or changed concurrently");
+    await tx.update(tradeDemands).set({ status: "fulfilled" }).where(and(eq(tradeDemands.id, transaction.demandId), ne(tradeDemands.status, "fulfilled")));
+  });
   // The offering remains published as a reusable product identity; fulfillment is recorded on the demand and transaction.
   await appendAuditEvent({ actorUserId: userId, action: "trade_transaction_closed", resourceType: "trade_transaction", resourceId: String(transactionId), dataClassification: "verified", metadata: { demandId: transaction.demandId, offeringId: transaction.offeringId, paymentStatus: transaction.paymentStatus } });
   return { transactionId, status: "closed" as const };

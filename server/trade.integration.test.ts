@@ -313,8 +313,9 @@ describe("trade operations foundation", () => {
 
       await expect(closeTradeTransactionForUser(buyerUserId, transactionId)).rejects.toThrow("Transaction must be received before closure");
       await updateTradeTransactionPaymentForUser(buyerUserId, transactionId, "bank_transfer_pending");
-      await expect(updateTradeTransactionPaymentForUser(supplierUserId, transactionId, "settled")).rejects.toThrow("Only the buyer or current owner");
-      await updateTradeTransactionPaymentForUser(buyerUserId, transactionId, "settled");
+      await expect(updateTradeTransactionPaymentForUser(buyerUserId, transactionId, "settled")).rejects.toThrow("payment proof reference");
+      await expect(updateTradeTransactionPaymentForUser(supplierUserId, transactionId, "settled", "TEST-PROOF-SUPPLIER")).rejects.toThrow("Only the buyer or current owner");
+      await updateTradeTransactionPaymentForUser(buyerUserId, transactionId, "settled", "TEST-PROOF-BUYER");
 
       const transport = await createTransportJobForUser(supplierUserId, {
         transactionId,
@@ -341,10 +342,17 @@ describe("trade operations foundation", () => {
       });
       deliveryId = delivery.deliveryId;
       expect(delivery.status).toBe("delivered");
+      await expect(recordTradeDeliveryForUser(supplierUserId, {
+        transactionId,
+        transportJobId,
+        deliveredQuantity: 10,
+        proofReference: "proof://e2e-delivery-001",
+      })).rejects.toThrow("already been recorded");
 
       await expect(acceptTradeDeliveryForUser(supplierUserId, deliveryId, "accepted_full")).rejects.toThrow("RECEIVING_PARTY_REQUIRED");
       const received = await acceptTradeDeliveryForUser(buyerUserId, deliveryId, "accepted_full", "Quantity and condition accepted");
       expect(received.acceptanceStatus).toBe("accepted_full");
+      await expect(acceptTradeDeliveryForUser(buyerUserId, deliveryId, "accepted_full")).rejects.toThrow("already been accepted");
       const closed = await closeTradeTransactionForUser(buyerUserId, transactionId);
       expect(closed.status).toBe("closed");
 
