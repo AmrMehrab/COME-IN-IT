@@ -352,7 +352,7 @@ describe("trade operations foundation", () => {
       await expect(acceptTradeDeliveryForUser(supplierUserId, deliveryId, "accepted_full")).rejects.toThrow("RECEIVING_PARTY_REQUIRED");
       const received = await acceptTradeDeliveryForUser(buyerUserId, deliveryId, "accepted_full", "Quantity and condition accepted");
       expect(received.acceptanceStatus).toBe("accepted_full");
-      await expect(acceptTradeDeliveryForUser(buyerUserId, deliveryId, "accepted_full")).rejects.toThrow("already been accepted");
+      await expect(acceptTradeDeliveryForUser(buyerUserId, deliveryId, "accepted_full")).rejects.toThrow("DELIVERY_NOT_READY");
       const closed = await closeTradeTransactionForUser(buyerUserId, transactionId);
       expect(closed.status).toBe("closed");
 
