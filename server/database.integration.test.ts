@@ -136,6 +136,7 @@ describe("database persistence schema", () => {
       openId,
       name: "Verification integration test",
       loginMethod: "integration-test",
+      role: "admin",
     });
     const userId = Number(inserted[0].insertId);
 
@@ -256,6 +257,7 @@ describe("database persistence schema", () => {
       openId: `kyb-eligibility-${randomUUID()}`,
       name: "KYB eligibility integration test",
       loginMethod: "integration-test",
+      role: "admin",
     });
     const userId = Number(inserted[0].insertId);
 

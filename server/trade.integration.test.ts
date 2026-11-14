@@ -312,8 +312,9 @@ describe("trade operations foundation", () => {
       expect(transaction.totalPriceMinor).toBe(1_250_000);
 
       await expect(closeTradeTransactionForUser(buyerUserId, transactionId)).rejects.toThrow("Transaction must be received before closure");
-      await updateTradeTransactionPaymentForUser(buyerUserId, transactionId, "settled");
+      await updateTradeTransactionPaymentForUser(buyerUserId, transactionId, "bank_transfer_pending");
       await expect(updateTradeTransactionPaymentForUser(supplierUserId, transactionId, "settled")).rejects.toThrow("Only the buyer or current owner");
+      await updateTradeTransactionPaymentForUser(buyerUserId, transactionId, "settled");
 
       const transport = await createTransportJobForUser(supplierUserId, {
         transactionId,

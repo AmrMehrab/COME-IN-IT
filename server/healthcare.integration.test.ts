@@ -72,7 +72,7 @@ describe("healthcare domain isolation", () => {
       ).rejects.toThrow("A verified KYC identity is required before creating a health profile");
 
       const kycSubmission = await submitKycVerificationForUser(patientUserId, { countryCode: "EG" });
-      await reviewKycVerification(patientUserId, kycSubmission.latest!.id, "verified", "Healthcare integration test approval");
+      await reviewKycVerification(adminUserId, kycSubmission.latest!.id, "verified", "Healthcare integration test approval");
 
       const healthProfileSummary = await createHealthProfileForUser(patientUserId, `health-id-${crypto.randomUUID()}`);
       expect(healthProfileSummary.profile?.status).toBe("active");
@@ -352,6 +352,7 @@ describe("healthcare domain isolation", () => {
       openId: `health-regression-trade-${crypto.randomUUID()}`,
       name: "Healthcare trade-regression test",
       loginMethod: "integration-test",
+      role: "admin",
     });
     const userId = Number(inserted[0].insertId);
 
