@@ -347,7 +347,7 @@ describe("trade operations foundation", () => {
         transportJobId,
         deliveredQuantity: 10,
         proofReference: "proof://e2e-delivery-001",
-      })).rejects.toThrow("already been recorded");
+      })).rejects.toThrow("TRANSACTION_NOT_DELIVERABLE");
 
       await expect(acceptTradeDeliveryForUser(supplierUserId, deliveryId, "accepted_full")).rejects.toThrow("RECEIVING_PARTY_REQUIRED");
       const received = await acceptTradeDeliveryForUser(buyerUserId, deliveryId, "accepted_full", "Quantity and condition accepted");
