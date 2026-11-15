@@ -96,12 +96,10 @@ export const businessEntities = mysqlTable(
   "business_entities",
   {
     id: int("id").autoincrement().primaryKey(),
-    ownerUserId: int("ownerUserId")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    ownerPersonId: int("ownerPersonId")
-      .notNull()
-      .references(() => persons.id, { onDelete: "restrict" }),
+    ownerUserId: int("ownerUserId").references(() => users.id, { onDelete: "cascade" }),
+    ownerPersonId: int("ownerPersonId").references(() => persons.id, { onDelete: "restrict" }),
+    createdByUserId: int("createdByUserId").references(() => users.id, { onDelete: "restrict" }),
+    createdByPersonId: int("createdByPersonId").references(() => persons.id, { onDelete: "restrict" }),
     legalName: varchar("legalName", { length: 255 }).notNull(),
     tradeName: varchar("tradeName", { length: 255 }),
     registrationNumber: varchar("registrationNumber", { length: 120 }),
@@ -173,6 +171,29 @@ export const businessMemberships = mysqlTable(
     index("business_memberships_user_idx").on(table.userId),
     index("business_memberships_person_idx").on(table.personId),
     uniqueIndex("business_memberships_business_user_unique").on(table.businessId, table.userId),
+  ],
+);
+
+/** Explicit grants scoped to one active membership; no role implies a grant. */
+export const businessMembershipPermissions = mysqlTable(
+  "business_membership_permissions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    membershipId: int("membershipId")
+      .notNull()
+      .references(() => businessMemberships.id, { onDelete: "restrict" }),
+    permissionCode: varchar("permissionCode", { length: 100 }).notNull(),
+    status: mysqlEnum("status", ["active", "revoked"]).default("active").notNull(),
+    grantedByUserId: int("grantedByUserId").references(() => users.id, { onDelete: "set null" }),
+    grantedAt: timestamp("grantedAt").defaultNow().notNull(),
+    expiresAt: timestamp("expiresAt"),
+    revokedAt: timestamp("revokedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [
+    uniqueIndex("business_membership_permission_unique").on(table.membershipId, table.permissionCode),
+    index("business_membership_permissions_status_idx").on(table.status, table.expiresAt),
   ],
 );
 
@@ -299,6 +320,12 @@ export const auditEvents = mysqlTable(
     action: varchar("action", { length: 120 }).notNull(),
     resourceType: varchar("resourceType", { length: 120 }).notNull(),
     resourceId: varchar("resourceId", { length: 120 }).notNull(),
+    businessId: int("businessId"),
+    membershipId: int("membershipId"),
+    permissionCode: varchar("permissionCode", { length: 100 }),
+    decision: mysqlEnum("decision", ["allow", "deny", "manual_review"]),
+    reasonCode: varchar("reasonCode", { length: 120 }),
+    requestId: varchar("requestId", { length: 120 }),
     dataClassification: mysqlEnum("dataClassification", [
       "public",
       "verified",
@@ -314,6 +341,7 @@ export const auditEvents = mysqlTable(
   table => [
     index("audit_events_actor_idx").on(table.actorUserId),
     index("audit_events_resource_idx").on(table.resourceType, table.resourceId),
+    index("audit_events_business_created_idx").on(table.businessId, table.createdAt),
   ],
 );
 
@@ -703,6 +731,7 @@ export const commercePurchaseOrders = mysqlTable(
   {
     id: int("id").autoincrement().primaryKey(),
     buyerUserId: int("buyerUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
+    buyerBusinessId: int("buyerBusinessId"),
     supplierBusinessId: int("supplierBusinessId"),
     offeringId: int("offeringId"),
     partnerKey: varchar("partnerKey", { length: 120 }).notNull(),
@@ -722,6 +751,11 @@ export const commercePurchaseOrders = mysqlTable(
   },
   table => [
     foreignKey({
+      columns: [table.buyerBusinessId],
+      foreignColumns: [businessEntities.id],
+      name: "commerce_order_buyer_business_fk",
+    }).onDelete("restrict"),
+    foreignKey({
       columns: [table.supplierBusinessId],
       foreignColumns: [businessEntities.id],
       name: "commerce_order_supplier_fk",
@@ -732,6 +766,7 @@ export const commercePurchaseOrders = mysqlTable(
       name: "commerce_order_offering_fk",
     }).onDelete("restrict"),
     index("commerce_orders_buyer_idx").on(table.buyerUserId),
+    index("commerce_orders_buyer_business_idx").on(table.buyerBusinessId),
     index("commerce_orders_partner_idx").on(table.partnerKey),
     index("commerce_orders_status_idx").on(table.status),
   ],

@@ -1,12 +1,30 @@
 # COME IN IT V1.0 — Architecture Decisions
 
-| ID | Decision | Status | Rationale |
+تجمع هذه القائمة بين قرارات التصميم وحالة التطبيق. كلمة **Accepted** لا تعني أن كل واجهات الإدارة أو إثباتات السياسة نُفذت.
+
+| ID | Decision | Status | Rationale / boundary |
 |---|---|---|---|
-| D-001 | KYC → KYB → Membership → Role → Permission → Offering → Matching → Trade → Audit → Intelligence is the governing sequence. | Accepted | Prevents anonymous commercial access. |
-| D-002 | User, Person, and Business are separate concepts. | Accepted | Supports multiple businesses and authorized representatives. |
-| D-003 | Product, Service, Used Asset, and Demand are first-class trade objects. | Accepted | Extends the platform from product marketplace to trade ecosystem. |
-| D-004 | Offering verification is independent from owner KYB. | Accepted | A verified business can still publish an unverified offering. |
-| D-005 | Visibility is Public / Verified / Restricted / Confidential-Sovereign. | Accepted | Prevents overexposure of buyer and government data. |
-| D-006 | Egyptian sovereign hosting is required for sensitive and regulated data. | Conditional | Provider selection and legal controls remain separate approvals. |
-| D-007 | Government integration, payments, blockchain, and final regulatory readiness are out of scope for V1.0. | Accepted | Avoids unsupported production claims. |
-| D-008 | Healthcare is a consent-governed bounded domain, modelled in a dedicated ERD and permitted to reference PERSON only. | Accepted | Protects clinical isolation: no health record, consent, provider, emergency access, or health audit foreign key may attach to a commercial entity, offering, match, contract, order, transaction, dispute, or trade audit record. |
+| D-001 | KYC → KYB → Membership → explicit Permission → Offering → Matching → Trade → Audit هو تسلسل الثقة. | Accepted | ترتيب معماري؛ تفاصيل المتطلبات القانونية لم تعتمد. |
+| D-002 | User وPerson وBusiness مفاهيم منفصلة. | Implemented | فصل الهوية الفردية عن المنشأة في المخطط والخدمات. |
+| D-003 | Product وService وUsed Asset وDemand كيانات تجارة مستقلة. | Accepted / partially implemented | توجد كيانات تشغيلية للعروض والطلبات؛ ذلك لا يفتح كل أنماط التجارة. |
+| D-004 | تحقق العرض مستقل عن KYB لصاحب العرض. | Accepted / partially implemented | المطابقة والكتالوج يتطلبان حالة عرض موثقة بحسب المسار. |
+| D-005 | Visibility هو Public / Verified / Restricted / Confidential-Sovereign. | Accepted as design | لا تعني هذه التصنيفات وحدها وجود ضوابط تخزين/استضافة سيادية كاملة. |
+| D-006 | استضافة البيانات الحساسة أو المنظمة سيادياً تتطلب اعتماداً منفصلاً. | Conditional | المزود والضوابط القانونية والتشغيلية لم تحدد هنا. |
+| D-007 | التكامل الحكومي والمدفوعات الحقيقية والتوقيع الإلكتروني والجاهزية التنظيمية النهائية خارج نطاق التغيير. | Accepted | منع ادعاءات إنتاجية غير مثبتة؛ B2G PO مغلق. |
+| D-008 | Healthcare نطاق منفصل؛ لا ترتبط سجلاته التجارية أو الصحية مباشرة بسجلات التجارة. | Accepted | الحفاظ على العزل البنيوي. |
+| D-009 | منشئ/مقدم طلب المنشأة ليس مالكاً تلقائياً. | Implemented in schema/service | يحفظ `createdByUserId/createdByPersonId`؛ تظل حقول `owner*` فارغة عند الإنشاء، ولا تنشأ عضوية مالك. سجلات الإنشاء التاريخية قد تترك حقول المنشئ NULL. |
+| D-010 | لا يمنح الدور إذناً ضمنياً؛ كل إذن تجاري منحة صريحة مرتبطة بعضوية منشأة بعينها. | Implemented for covered handlers | يجب تطابق السياق والمستخدم والعضوية وحالتها والمنحة ورمز الإذن؛ viewer مرفوض؛ KYC إلزامي وKYB مطلوب للمسارات التي تشترطه. لا يوجد API عام لإدارة العضوية/المنح. |
+| D-011 | أمر الشراء يحدد منشأة المشتري، ويحل بيانات العرض والسعر وMOQ من الخادم، ويتطلب أهلية علاقة B2B. | Implemented for B2B slice | المدخل لا يحمل هوية الطرف/المنتج/السعر/الحد الأدنى؛ يقبل الخادم قرار العلاقة `allow` فقط ويسجل القرار والسبب. يرفض الجهات الحكومية؛ لا شراء فردياً أو C2C/B2G. |
+| D-012 | قرارات التفويض تسجل بشكل منظم قبل الإنفاذ. | Implemented at application layer | الأحداث تشمل الفاعل والسياق ورمز الصلاحية والقرار والسبب ودور العضوية في metadata؛ لا يثبت ذلك WORM أو منع التعديل أو مدد الاحتفاظ. |
+| D-013 | جميع المسارات غير المحسومة تبقى مغلقة افتراضياً. | Accepted | KYC/KYB وأدلة الملكية وتعدد المالكين وMFA والجلسات وC2C/B2C/C2B/B2G والخصوصية/الاحتفاظ والملف المهني/التوظيف تحتاج اعتماداً. |
+| D-014 | Migration `0016_cit_arch_iam_001.sql` يراجع ولا يطبق ضمن هذا العمل. | Accepted / enforced by execution | لا اتصال أو تعديل لقاعدة إنتاج؛ حقول المنشئ التاريخية اختيارية لتجنب اختلاق مقدم طلب بأثر رجعي. |
+| D-015 | قبول عرض السعر لا يثبت ملكية الأصل أو المعاملة للمشتري. | Implemented | تبقى حقول `ownerBusinessId/ownerIndividualProfileId` فارغة ويسجل `ownershipDetermination=unresolved` إلى أن تعتمد سياسة وأدلة ملكية. |
+| D-016 | لا ينفذ ملف المحترف أو مسار التوظيف قبل اعتماد الخصوصية والمشاركة. | Deferred — Issue #9 | لا سياسة مشاركة/موافقة/نطاق حقول/احتفاظ معتمدة؛ لم يضف هذا الفرع نماذج أو مسارات توظيف. |
+
+## قرارات مؤجلة
+
+لا يحدد هذا التغيير أدلة أو مزودي KYC/KYB أو قواعد تحقق قانونية، ولا آلية قبول المالك أو المفوض، أو نقل الملكية/تعدد المالكين ونصاب الموافقة. كما لا يحدد MFA أو مدد الجلسات أو استعادة الحساب أو مدد الاحتفاظ/الحذف أو مشاركة الملف المهني، ولا شروط C2C/B2C/C2B/B2G. تظل هذه العمليات غير مفعلة إلى حين اعتماد السياسات.
+
+## نتائج التحقق على الفرع — 2026-11-15
+
+نجحت نتائج الفرع الحالية: `pnpm check`، و`pnpm test:unit` (40 اختباراً في 9 ملفات)، و`pnpm build` مع تحذيرات Analytics وحجم bundle. اختبارات التكامل غير متحققة: نمط السكربت لم يجد الملفات، والتشغيل المباشر تعذر عند `getDb() === null` بسبب غياب `DATABASE_URL`؛ لم تحدث كتابة قاعدة بيانات. لم تطبق migration. هذه قرارات فرع للمراجعة وليست قرار إطلاق أو دمج.

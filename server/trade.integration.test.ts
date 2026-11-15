@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   createBusinessEntityForUser,
@@ -29,8 +29,11 @@ import {
   auditEvents,
   businessActivityVerifications,
   businessEntities,
+  businessMembershipPermissions,
+  businessMemberships,
   commercePurchaseOrders,
   kybVerifications,
+  persons,
   tradeDemands,
   tradeMatches,
   tradeOfferings,
@@ -42,6 +45,39 @@ import {
   transactionDisputes,
   users,
 } from "../drizzle/schema";
+
+async function seedBusinessMembership(
+  database: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  userId: number,
+  businessId: number,
+  permissionCodes: string[],
+) {
+  const person = await database.select({ id: persons.id }).from(persons).where(eq(persons.userId, userId)).limit(1);
+  if (!person[0]) throw new Error(`Person record missing for user ${userId}`);
+  const inserted = await database.insert(businessMemberships).values({
+    businessId,
+    userId,
+    personId: person[0].id,
+    membershipRole: "authorized_representative",
+    status: "active",
+  });
+  const membershipId = Number(inserted[0].insertId);
+  await database.insert(businessMembershipPermissions).values(permissionCodes.map(permissionCode => ({
+    membershipId,
+    permissionCode,
+    status: "active" as const,
+  })));
+  return membershipId;
+}
+
+async function cleanupBusinessMemberships(database: NonNullable<Awaited<ReturnType<typeof getDb>>>, businessId?: number) {
+  if (!businessId) return;
+  const memberships = await database.select({ id: businessMemberships.id }).from(businessMemberships).where(eq(businessMemberships.businessId, businessId));
+  for (const membership of memberships) {
+    await database.delete(businessMembershipPermissions).where(eq(businessMembershipPermissions.membershipId, membership.id));
+  }
+  await database.delete(businessMemberships).where(eq(businessMemberships.businessId, businessId));
+}
 
 describe("trade operations foundation", () => {
   it("enforces KYC → KYB → membership → offering verification before an eligible B2B match", async () => {
@@ -71,6 +107,7 @@ describe("trade operations foundation", () => {
     let buyerBusinessId: number | undefined;
     let offeringId: number | undefined;
     let orderId: number | undefined;
+    let buyerMembershipId: number | undefined;
     let pendingDemandId: number | undefined;
     let eligibleDemandId: number | undefined;
 
@@ -99,6 +136,10 @@ describe("trade operations foundation", () => {
       supplierBusinessId = supplierBusiness.id;
       buyerBusinessId = buyerBusiness.id;
 
+      expect(await database.select().from(businessMemberships).where(eq(businessMemberships.businessId, supplierBusinessId))).toHaveLength(0);
+      await seedBusinessMembership(database, supplierUserId, supplierBusinessId, ["business.kyb.submit", "business.activity.submit", "trade.offering.create", "trade.quotation.submit"]);
+      buyerMembershipId = await seedBusinessMembership(database, buyerUserId, buyerBusinessId, ["business.kyb.submit", "business.activity.submit", "commerce.purchase_order.create", "commerce.purchase_order.read", "trade.demand.create", "trade.match.evaluate", "trade.rfq.create", "trade.quotation.accept"]);
+
       const supplierKyb = await submitKybVerificationForUser(supplierUserId, supplierBusinessId, { registrationReference: "trade-supplier-kyb" });
       const buyerKyb = await submitKybVerificationForUser(buyerUserId, buyerBusinessId, { registrationReference: "trade-buyer-kyb" });
       await reviewKybVerification(adminUserId, supplierKyb!.id, "verified", "trade integration supplier KYB approval");
@@ -125,6 +166,7 @@ describe("trade operations foundation", () => {
 
       await expect(
         createCommercePurchaseOrderForUser(buyerUserId, {
+          buyerBusinessId: buyerBusinessId!,
           offeringId: 999_999_999,
           quantity: 100,
           message: "Should be rejected",
@@ -147,7 +189,16 @@ describe("trade operations foundation", () => {
         .update(tradeOfferings)
         .set({ unitPriceMinor: 1250, minimumOrderQuantity: 10, quantityUnit: "piece", lifecycleStatus: "published" })
         .where(eq(tradeOfferings.id, offeringId));
+      await expect(createCommercePurchaseOrderForUser(supplierUserId, {
+        buyerBusinessId: buyerBusinessId!, offeringId, quantity: 25, message: "Cross-organization IDOR attempt",
+      })).rejects.toThrow("Business operation is not authorized");
+      await database.update(businessMemberships).set({ status: "inactive" }).where(eq(businessMemberships.id, buyerMembershipId!));
+      await expect(createCommercePurchaseOrderForUser(buyerUserId, {
+        buyerBusinessId: buyerBusinessId!, offeringId, quantity: 25, message: "Revoked membership attempt",
+      })).rejects.toThrow("Business operation is not authorized");
+      await database.update(businessMemberships).set({ status: "active" }).where(eq(businessMemberships.id, buyerMembershipId!));
       const createdOrder = await createCommercePurchaseOrderForUser(buyerUserId, {
+        buyerBusinessId: buyerBusinessId!,
         offeringId,
         quantity: 25,
         message: "Use server-side commercial terms",
@@ -157,6 +208,16 @@ describe("trade operations foundation", () => {
       expect(createdOrder.offeringId).toBe(offeringId);
       expect(createdOrder.unitPriceMinor).toBe(1250);
       expect(createdOrder.moq).toBe(10);
+      const relationshipAuditRows = await database
+        .select({ decision: auditEvents.decision, metadataJson: auditEvents.metadataJson })
+        .from(auditEvents)
+        .where(and(
+          eq(auditEvents.actorUserId, buyerUserId),
+          eq(auditEvents.action, "commercial_relationship_evaluated"),
+          eq(auditEvents.resourceId, `business:${supplierBusinessId}|business:${buyerBusinessId}`),
+        ));
+      expect(relationshipAuditRows.at(-1)?.decision).toBe("allow");
+      expect(JSON.parse(relationshipAuditRows.at(-1)?.metadataJson ?? "{}").membershipRole).toBe("authorized_representative");
       const eligibleDemand = await createTradeDemandForUser(buyerUserId, {
         businessId: buyerBusinessId,
         demandType: "product",
@@ -187,6 +248,8 @@ describe("trade operations foundation", () => {
       }
       if (supplierBusinessId) await database.delete(businessActivityVerifications).where(eq(businessActivityVerifications.businessId, supplierBusinessId));
       if (buyerBusinessId) await database.delete(businessActivityVerifications).where(eq(businessActivityVerifications.businessId, buyerBusinessId));
+      await cleanupBusinessMemberships(database, supplierBusinessId);
+      await cleanupBusinessMemberships(database, buyerBusinessId);
       if (supplierBusinessId) await database.delete(businessEntities).where(eq(businessEntities.id, supplierBusinessId));
       if (buyerBusinessId) await database.delete(businessEntities).where(eq(businessEntities.id, buyerBusinessId));
       for (const userId of [adminUserId, supplierUserId, buyerUserId]) {
@@ -253,6 +316,9 @@ describe("trade operations foundation", () => {
       supplierBusinessId = supplierBusiness.id;
       buyerBusinessId = buyerBusiness.id;
 
+      await seedBusinessMembership(database, supplierUserId, supplierBusinessId, ["business.kyb.submit", "business.activity.submit", "trade.offering.create", "trade.quotation.submit", "trade.transport.assign", "trade.transport.advance", "trade.delivery.record"]);
+      await seedBusinessMembership(database, buyerUserId, buyerBusinessId, ["business.kyb.submit", "business.activity.submit", "trade.demand.create", "trade.match.evaluate", "trade.rfq.create", "trade.quotation.accept", "trade.payment.update", "trade.delivery.accept", "trade.transaction.close", "trade.transaction.read"]);
+
       const supplierKyb = await submitKybVerificationForUser(supplierUserId, supplierBusinessId, { registrationReference: "trade-e2e-supplier-kyb" });
       const buyerKyb = await submitKybVerificationForUser(buyerUserId, buyerBusinessId, { registrationReference: "trade-e2e-buyer-kyb" });
       await reviewKybVerification(adminUserId, supplierKyb!.id, "verified", "trade E2E supplier KYB approval");
@@ -310,6 +376,8 @@ describe("trade operations foundation", () => {
       transactionId = transaction.id;
       expect(transaction.status).toBe("accepted");
       expect(transaction.totalPriceMinor).toBe(1_250_000);
+      expect(transaction.ownerBusinessId).toBeNull();
+      expect(transaction.ownerIndividualProfileId).toBeNull();
 
       await expect(closeTradeTransactionForUser(buyerUserId, transactionId)).rejects.toThrow("Transaction must be received before closure");
       await updateTradeTransactionPaymentForUser(buyerUserId, transactionId, "settled");
@@ -330,7 +398,7 @@ describe("trade operations foundation", () => {
       const inTransit = await advanceTradeTransportForUser(supplierUserId, transportJobId, "in_transit");
       expect(inTransit.status).toBe("in_transit");
 
-      const delivery = await recordTradeDeliveryForUser(buyerUserId, {
+      const delivery = await recordTradeDeliveryForUser(supplierUserId, {
         transactionId,
         transportJobId,
         deliveredQuantity: 10,
@@ -340,6 +408,8 @@ describe("trade operations foundation", () => {
       deliveryId = delivery.deliveryId;
       expect(delivery.status).toBe("delivered");
 
+      await expect(acceptTradeDeliveryForUser(supplierUserId, deliveryId, "accepted_full"))
+        .rejects.toThrow("Active, authorized transaction-party membership is required");
       const received = await acceptTradeDeliveryForUser(buyerUserId, deliveryId, "accepted_full", "Quantity and condition accepted");
       expect(received.acceptanceStatus).toBe("accepted_full");
       const closed = await closeTradeTransactionForUser(buyerUserId, transactionId);
@@ -372,6 +442,8 @@ describe("trade operations foundation", () => {
       }
       if (supplierBusinessId) await database.delete(businessActivityVerifications).where(eq(businessActivityVerifications.businessId, supplierBusinessId));
       if (buyerBusinessId) await database.delete(businessActivityVerifications).where(eq(businessActivityVerifications.businessId, buyerBusinessId));
+      await cleanupBusinessMemberships(database, supplierBusinessId);
+      await cleanupBusinessMemberships(database, buyerBusinessId);
       if (supplierBusinessId) await database.delete(businessEntities).where(eq(businessEntities.id, supplierBusinessId));
       if (buyerBusinessId) await database.delete(businessEntities).where(eq(businessEntities.id, buyerBusinessId));
       for (const userId of [adminUserId, supplierUserId, buyerUserId]) await database.delete(users).where(eq(users.id, userId));

@@ -1,5 +1,7 @@
 # CIT PORTAL IMPLEMENTATION PLAN
 
+> **الحالة المحدثة — 2026-11-15:** الخطة أدناه بدأت كوثيقة ما قبل التنفيذ. تم تنفيذ نطاق تقني قابل للحسم على `feature/CIT-PORTAL-001` بعد موافقة المستخدم. الأقسام التي تحمل وصفاً قديماً للحالة تُقرأ كتاريخ للخط الأساس؛ ملحق التنفيذ في نهاية الملف هو المرجع للحالة الحالية. هذا لا يعد موافقة دمج أو نشر.
+
 ## Objective
 
 Deliver a production-oriented, role-aware commerce portal while preserving the existing architecture and keeping the demo/simulation experience separated from real production commerce flows.
@@ -42,14 +44,14 @@ Deliver a production-oriented, role-aware commerce portal while preserving the e
 - New product integrity tests
 - New order creation tests
 
-## Phase 0 — Review Gate (Current)
+## Phase 0 — Review Gate (historical baseline)
 
 - Confirm repository state and trust boundary
 - Review auth, policy, schemas, and membership checks
 - Produce review documents
 - Freeze any schema or policy changes until human approval is received
 
-Status: complete for review-only stage
+Status at plan creation: complete for review-only stage; superseded by the approved feature-branch implementation below.
 
 ## Phase A — Security and Integration Review
 
@@ -75,9 +77,9 @@ Before any implementation code is written, confirm:
 - price and MOQ are DB-authoritative
 - audit logs are created on every order action
 
-### Current status
+### Historical status before approved implementation
 
-The current implementation fails these checks because the order API accepts client-supplied values and uses them directly.
+At plan creation, the implementation failed these checks because the order API accepted client-supplied values. This specific finding was corrected in the approved feature-branch work; see the current status below.
 
 ## Phase B — Role-Aware Portal Architecture
 
@@ -176,7 +178,7 @@ Demo/simulation flows must be clearly separated from production commerce so that
 - TypeScript check passes
 - Production build passes
 
-## Risks and Constraints
+## Historical Risks and Constraints (pre-implementation)
 
 - The current portal design uses local role and verification state, which is not production-safe.
 - The current commerce order API accepts client-supplied commercial values.
@@ -189,4 +191,39 @@ No commerce feature may be implemented by trusting client-side inputs or UI stat
 
 ---
 
-Status: implementation plan prepared for approval before code changes
+Status: original pre-implementation plan; current execution results and outstanding work follow.
+
+---
+
+## Current implementation status — 2026-11-15
+
+### Completed in this branch
+
+- Separated business applicant/creator fields from legal owner fields; business creation requires KYC, stores the creator, leaves owner unset, and does not create owner membership automatically.
+- Added a deny-by-default authorization helper requiring the exact business context, active membership, explicit permission code/status, unexpired grant, KYC, and KYB for operations that require a verified business. No membership role implicitly grants permissions.
+- Added structured allow/deny audit fields for covered business authorization checks, including `membershipRole` in metadata; tightened list/read/mutation scopes against cross-business access and revoked/expired authorization.
+- Changed commerce order input to `buyerBusinessId`, `offeringId`, `quantity`, and `message`; the server resolves partner/product and commercial terms from the verified catalog and permits creation only when the B2B relationship evaluation is `allow`. B2C/C2C/B2G purchase flows are not enabled; government entities are rejected.
+- Replaced portal demo prices, products, and fixed KYC claims with server catalog/KYC queries; the UI exposes a B2B-only purchase path and labels server revalidation, while individual and government purchase remain closed.
+- Prevented quotation acceptance from assigning legal ownership without evidence; transaction owner fields remain null and the audit event states `ownershipDetermination=unresolved`.
+- Added authorization unit tests and strengthened trade integration scenarios for missing grants, role-only access, IDOR/context mismatch, membership revocation, and counterparty permissions.
+- Updated the canonical specification, entity dictionary, workflow catalog, permissions matrix, acceptance criteria, gap register, architecture decisions, security review, and this implementation plan.
+
+### Quality results
+
+- `pnpm check`: passed.
+- `pnpm test:unit`: passed (40 tests across 9 files; 8 authorization-engine tests plus 7 pure relationship-eligibility tests).
+- `pnpm build`: passed; Vite reports undefined Analytics variables and a non-blocking frontend chunk larger than 500KB.
+- Integration tests: `pnpm test:integration` found no files via its script filter. Direct execution of `server/trade.integration.test.ts` and `server/commercial-capabilities.integration.test.ts` failed all four DB-backed tests at `getDb() === null` because `DATABASE_URL` is not configured. No database writes occurred; integration remains unverified.
+- Migration `drizzle/0016_cit_arch_iam_001.sql` and snapshot/journal are generated locally only and were not applied.
+
+### Decisions and implementation deliberately deferred
+
+- Ownership evidence, legal representative proof, owner assignment, multiple owners/quorum, membership invitation/approval, and permission-grant/revoke administration.
+- KYC/KYB evidence standards and provider/operational review rules; no legal standard is inferred.
+- MFA, session lifetime/recovery, individual commerce and used-asset/C2C thresholds, B2C/C2B/B2G eligibility, and government integration.
+- Professional-profile and job workflows (Issue #9) remain unimplemented pending approval of privacy, sharing/consent, field-scope, and retention rules; no legal or commercial policy is inferred. Privacy and retention/deletion rules, support access, and storage-level immutable/WORM audit also remain unresolved.
+- Successful endpoint-level integration testing on an approved isolated test database.
+
+### Final delivery gate
+
+The branch is for review via a Pull Request only. Do not merge, deploy, run `db:push`, apply the migration, or modify production data. Operations depending on unresolved policy remain denied/closed by default. The PR must state that integration tests remain unverified due to the absent test database.
