@@ -4,6 +4,10 @@ import * as db from "./db";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import {
+  completeFounderBootstrap,
+  getFounderBootstrapStatus,
+} from "./founderBootstrap";
+import {
   adminProcedure,
   protectedProcedure,
   publicProcedure,
@@ -84,6 +88,13 @@ const businessActivityType = z.enum([
   "service_provider",
 ]);
 const tradePartyKind = z.enum(["business", "individual"]);
+const founderProfileInput = z.object({
+  legalName: z.string().trim().min(2).max(255),
+  nationalId: z.string().trim().min(6).max(32).regex(/^\d+$/),
+  phone: z.string().trim().min(5).max(32).optional(),
+  email: z.string().trim().email().max(320).optional(),
+  address: z.string().trim().min(2).max(500).optional(),
+});
 const jsonTextField = z
   .string()
   .trim()
@@ -107,6 +118,17 @@ export const appRouter = router({
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
+  }),
+
+  founder: router({
+    status: publicProcedure.query(({ ctx }) =>
+      getFounderBootstrapStatus(ctx.user?.openId)
+    ),
+    completeBootstrap: protectedProcedure
+      .input(founderProfileInput)
+      .mutation(({ ctx, input }) =>
+        completeFounderBootstrap(ctx.user, input)
+      ),
   }),
 
   bookmarks: router({

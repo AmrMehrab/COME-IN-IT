@@ -2,6 +2,7 @@ import { COOKIE_NAME, ONE_YEAR_MS, OAUTH_STATE_COOKIE, decodeOAuthState } from "
 import { parse as parseCookieHeader } from "cookie";
 import type { Express, Request, Response } from "express";
 import * as db from "../db";
+import { isOAuthAccountRegistrationAllowed } from "../founderBootstrap";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
 
@@ -37,6 +38,13 @@ export function registerOAuthRoutes(app: Express) {
 
       if (!userInfo.openId) {
         res.status(400).json({ error: "openId missing from user info" });
+        return;
+      }
+
+      if (!(await isOAuthAccountRegistrationAllowed(userInfo.openId))) {
+        res.status(403).json({
+          error: "التسجيل العام مغلق حتى اكتمال تأسيس حساب المؤسس.",
+        });
         return;
       }
 
