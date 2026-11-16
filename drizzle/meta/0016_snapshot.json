@@ -1,7 +1,7 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "f28be56d-10d9-4cd4-8637-436cdbe8202e",
+  "id": "3a7cd369-afc9-4f01-a2ae-c5c92ca6e05a",
   "prevId": "f5ff395e-73cc-4c3a-a8d6-448b6f28350f",
   "tables": {
     "audit_events": {
@@ -715,8 +715,8 @@
         }
       },
       "foreignKeys": {
-        "business_membership_permissions_membershipId_business_memberships_id_fk": {
-          "name": "business_membership_permissions_membershipId_business_memberships_id_fk",
+        "bmp_membership_fk": {
+          "name": "bmp_membership_fk",
           "tableFrom": "business_membership_permissions",
           "tableTo": "business_memberships",
           "columnsFrom": [
@@ -728,8 +728,8 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "business_membership_permissions_grantedByUserId_users_id_fk": {
-          "name": "business_membership_permissions_grantedByUserId_users_id_fk",
+        "bmp_granted_by_fk": {
+          "name": "bmp_granted_by_fk",
           "tableFrom": "business_membership_permissions",
           "tableTo": "users",
           "columnsFrom": [

@@ -38,7 +38,9 @@ export type BusinessAuthorizationInput = {
   membershipStatus?: string | null;
   membershipRole?: string | null;
   personKycStatus?: string | null;
+  personKycExpiresAt?: Date | null;
   businessVerificationStatus?: string | null;
+  businessVerificationExpiresAt?: Date | null;
   requiredPermission: BusinessPermissionCode;
   grantedPermission?: string | null;
   permissionStatus?: string | null;
@@ -54,8 +56,14 @@ export type BusinessAuthorizationDecision = {
 };
 
 /** Permission checks are scoped to the exact business and are deny-by-default. */
-export function evaluateBusinessAuthorization(input: BusinessAuthorizationInput): BusinessAuthorizationDecision {
-  if (!input.requestedBusinessId || !Number.isInteger(input.requestedBusinessId) || input.requestedBusinessId <= 0) {
+export function evaluateBusinessAuthorization(
+  input: BusinessAuthorizationInput
+): BusinessAuthorizationDecision {
+  if (
+    !input.requestedBusinessId ||
+    !Number.isInteger(input.requestedBusinessId) ||
+    input.requestedBusinessId <= 0
+  ) {
     return { allowed: false, reasonCode: "BUSINESS_CONTEXT_REQUIRED" };
   }
   if (input.membershipBusinessId !== input.requestedBusinessId) {
@@ -70,16 +78,41 @@ export function evaluateBusinessAuthorization(input: BusinessAuthorizationInput)
   if (input.membershipRole === "viewer") {
     return { allowed: false, reasonCode: "ROLE_NOT_AUTHORIZED" };
   }
-  if (input.requireKyc !== false && input.personKycStatus !== "verified") {
-    return { allowed: false, reasonCode: "KYC_REQUIRED" };
+  const now = input.now ?? new Date();
+  if (input.requireKyc !== false) {
+    if (
+      input.personKycStatus === "expired" ||
+      (input.personKycExpiresAt &&
+        input.personKycExpiresAt.getTime() <= now.getTime())
+    ) {
+      return { allowed: false, reasonCode: "KYC_EXPIRED" };
+    }
+    if (input.personKycStatus !== "verified") {
+      return { allowed: false, reasonCode: "KYC_REQUIRED" };
+    }
   }
-  if (input.requireVerifiedBusiness && input.businessVerificationStatus !== "verified") {
-    return { allowed: false, reasonCode: "KYB_REQUIRED" };
+  if (input.requireVerifiedBusiness) {
+    if (
+      input.businessVerificationStatus === "expired" ||
+      (input.businessVerificationExpiresAt &&
+        input.businessVerificationExpiresAt.getTime() <= now.getTime())
+    ) {
+      return { allowed: false, reasonCode: "KYB_EXPIRED" };
+    }
+    if (input.businessVerificationStatus !== "verified") {
+      return { allowed: false, reasonCode: "KYB_REQUIRED" };
+    }
   }
-  if (input.grantedPermission !== input.requiredPermission || input.permissionStatus !== "active") {
+  if (
+    input.grantedPermission !== input.requiredPermission ||
+    input.permissionStatus !== "active"
+  ) {
     return { allowed: false, reasonCode: "EXPLICIT_PERMISSION_REQUIRED" };
   }
-  if (input.permissionExpiresAt && input.permissionExpiresAt.getTime() <= (input.now ?? new Date()).getTime()) {
+  if (
+    input.permissionExpiresAt &&
+    input.permissionExpiresAt.getTime() <= now.getTime()
+  ) {
     return { allowed: false, reasonCode: "PERMISSION_EXPIRED" };
   }
   return { allowed: true, reasonCode: "PERMISSION_GRANTED" };

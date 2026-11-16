@@ -28,9 +28,13 @@ import {
 async function grantRelationshipPermission(
   database: NonNullable<Awaited<ReturnType<typeof getDb>>>,
   userId: number,
-  businessId: number,
+  businessId: number
 ) {
-  const person = await database.select({ id: persons.id }).from(persons).where(eq(persons.userId, userId)).limit(1);
+  const person = await database
+    .select({ id: persons.id })
+    .from(persons)
+    .where(eq(persons.userId, userId))
+    .limit(1);
   if (!person[0]) throw new Error(`Person record missing for user ${userId}`);
   const inserted = await database.insert(businessMemberships).values({
     businessId,
@@ -49,7 +53,7 @@ async function grantRelationshipPermission(
 }
 
 describe("commercial capabilities and relationship rules", () => {
-  it("evaluates verified activity profiles across B2B, B2C, C2B and C2C while enforcing requester authority", async () => {
+  it("allows eligible B2B and denies individual commerce while enforcing requester authority", async () => {
     const db = await getDb();
     expect(db).not.toBeNull();
     const database = db!;
@@ -71,10 +75,28 @@ describe("commercial capabilities and relationship rules", () => {
         ids.push(Number(inserted[0].insertId));
       }
 
-      const [adminUserId, factoryOwnerId, importerOwnerId, producerUserId, consumerUserId] = ids;
-      for (const userId of [factoryOwnerId, importerOwnerId, producerUserId, consumerUserId]) {
-        const kyc = await submitKycVerificationForUser(userId, { countryCode: "EG" });
-        await reviewKycVerification(adminUserId, kyc.latest!.id, "verified", "commercial capability KYC approval");
+      const [
+        adminUserId,
+        factoryOwnerId,
+        importerOwnerId,
+        producerUserId,
+        consumerUserId,
+      ] = ids;
+      for (const userId of [
+        factoryOwnerId,
+        importerOwnerId,
+        producerUserId,
+        consumerUserId,
+      ]) {
+        const kyc = await submitKycVerificationForUser(userId, {
+          countryCode: "EG",
+        });
+        await reviewKycVerification(
+          adminUserId,
+          kyc.latest!.id,
+          "verified",
+          "commercial capability KYC approval"
+        );
       }
 
       const factory = await createBusinessEntityForUser(factoryOwnerId, {
@@ -87,43 +109,107 @@ describe("commercial capabilities and relationship rules", () => {
       });
       factoryBusinessId = factory.id;
       importerBusinessId = importer.id;
-      membershipIds.push(await grantRelationshipPermission(database, factoryOwnerId, factoryBusinessId));
-      membershipIds.push(await grantRelationshipPermission(database, importerOwnerId, importerBusinessId));
+      membershipIds.push(
+        await grantRelationshipPermission(
+          database,
+          factoryOwnerId,
+          factoryBusinessId
+        )
+      );
+      membershipIds.push(
+        await grantRelationshipPermission(
+          database,
+          importerOwnerId,
+          importerBusinessId
+        )
+      );
 
-      const factoryKyb = await submitKybVerificationForUser(factoryOwnerId, factoryBusinessId, { registrationReference: "factory-kyb" });
-      const importerKyb = await submitKybVerificationForUser(importerOwnerId, importerBusinessId, { registrationReference: "importer-kyb" });
-      await reviewKybVerification(adminUserId, factoryKyb!.id, "verified", "factory KYB approval");
-      await reviewKybVerification(adminUserId, importerKyb!.id, "verified", "importer KYB approval");
+      const factoryKyb = await submitKybVerificationForUser(
+        factoryOwnerId,
+        factoryBusinessId,
+        { registrationReference: "factory-kyb" }
+      );
+      const importerKyb = await submitKybVerificationForUser(
+        importerOwnerId,
+        importerBusinessId,
+        { registrationReference: "importer-kyb" }
+      );
+      await reviewKybVerification(
+        adminUserId,
+        factoryKyb!.id,
+        "verified",
+        "factory KYB approval"
+      );
+      await reviewKybVerification(
+        adminUserId,
+        importerKyb!.id,
+        "verified",
+        "importer KYB approval"
+      );
 
-      const factoryActivity = await submitBusinessActivityVerificationForUser(factoryOwnerId, factoryBusinessId, { activityType: "factory" });
-      const importerActivity = await submitBusinessActivityVerificationForUser(importerOwnerId, importerBusinessId, { activityType: "importer" });
-      await reviewBusinessActivityVerification(adminUserId, factoryActivity.id, "verified");
-      await reviewBusinessActivityVerification(adminUserId, importerActivity.id, "verified");
+      const factoryActivity = await submitBusinessActivityVerificationForUser(
+        factoryOwnerId,
+        factoryBusinessId,
+        { activityType: "factory" }
+      );
+      const importerActivity = await submitBusinessActivityVerificationForUser(
+        importerOwnerId,
+        importerBusinessId,
+        { activityType: "importer" }
+      );
+      await reviewBusinessActivityVerification(
+        adminUserId,
+        factoryActivity.id,
+        "verified"
+      );
+      await reviewBusinessActivityVerification(
+        adminUserId,
+        importerActivity.id,
+        "verified"
+      );
 
-      const producerProfile = await submitIndividualActivityProfileForUser(producerUserId, {
-        activityType: "individual_producer",
-        capabilitiesJson: JSON.stringify({ supply: ["product"] }),
-      });
-      const consumerProfile = await submitIndividualActivityProfileForUser(consumerUserId, {
-        activityType: "consumer",
-      });
+      const producerProfile = await submitIndividualActivityProfileForUser(
+        producerUserId,
+        {
+          activityType: "individual_producer",
+          capabilitiesJson: JSON.stringify({ supply: ["product"] }),
+        }
+      );
+      const consumerProfile = await submitIndividualActivityProfileForUser(
+        consumerUserId,
+        {
+          activityType: "consumer",
+        }
+      );
       producerProfileId = producerProfile.id;
       consumerProfileId = consumerProfile.id;
-      await reviewIndividualActivityProfile(adminUserId, producerProfileId, "verified");
-      await reviewIndividualActivityProfile(adminUserId, consumerProfileId, "verified");
+      await reviewIndividualActivityProfile(
+        adminUserId,
+        producerProfileId,
+        "verified"
+      );
+      await reviewIndividualActivityProfile(
+        adminUserId,
+        consumerProfileId,
+        "verified"
+      );
 
-      await expect(checkCommercialRelationshipForUser(adminUserId, {
-        supplierKind: "business",
-        supplierBusinessId: factoryBusinessId,
-        requesterKind: "business",
-        requesterBusinessId: importerBusinessId,
-      })).rejects.toThrow("Business operation is not authorized");
-      await expect(checkCommercialRelationshipForUser(producerUserId, {
-        supplierKind: "individual",
-        supplierIndividualProfileId: producerProfileId,
-        requesterKind: "individual",
-        requesterIndividualProfileId: consumerProfileId,
-      })).rejects.toThrow("requester activity profile is not owned");
+      await expect(
+        checkCommercialRelationshipForUser(adminUserId, {
+          supplierKind: "business",
+          supplierBusinessId: factoryBusinessId,
+          requesterKind: "business",
+          requesterBusinessId: importerBusinessId,
+        })
+      ).rejects.toThrow("Business operation is not authorized");
+      await expect(
+        checkCommercialRelationshipForUser(producerUserId, {
+          supplierKind: "individual",
+          supplierIndividualProfileId: producerProfileId,
+          requesterKind: "individual",
+          requesterIndividualProfileId: consumerProfileId,
+        })
+      ).rejects.toThrow("requester activity profile is not owned");
 
       await expect(
         checkCommercialRelationshipForUser(importerOwnerId, {
@@ -131,8 +217,12 @@ describe("commercial capabilities and relationship rules", () => {
           supplierBusinessId: factoryBusinessId,
           requesterKind: "business",
           requesterBusinessId: importerBusinessId,
-        }),
-      ).resolves.toMatchObject({ decision: "allow", relationshipMode: "b2b", score: 100 });
+        })
+      ).resolves.toMatchObject({
+        decision: "allow",
+        relationshipMode: "b2b",
+        score: 100,
+      });
 
       await expect(
         checkCommercialRelationshipForUser(consumerUserId, {
@@ -140,8 +230,27 @@ describe("commercial capabilities and relationship rules", () => {
           supplierBusinessId: factoryBusinessId,
           requesterKind: "individual",
           requesterIndividualProfileId: consumerProfileId,
-        }),
-      ).resolves.toMatchObject({ decision: "allow", relationshipMode: "b2c", score: 100 });
+        })
+      ).resolves.toMatchObject({
+        decision: "deny",
+        relationshipMode: "b2c",
+        decisionReason: "consumer_to_factory_not_supported",
+        score: 0,
+      });
+
+      await expect(
+        checkCommercialRelationshipForUser(consumerUserId, {
+          supplierKind: "business",
+          supplierBusinessId: importerBusinessId,
+          requesterKind: "individual",
+          requesterIndividualProfileId: consumerProfileId,
+        })
+      ).resolves.toMatchObject({
+        decision: "deny",
+        relationshipMode: "b2c",
+        decisionReason: "consumer_to_importer_not_supported",
+        score: 0,
+      });
 
       await expect(
         checkCommercialRelationshipForUser(importerOwnerId, {
@@ -149,8 +258,13 @@ describe("commercial capabilities and relationship rules", () => {
           supplierIndividualProfileId: producerProfileId,
           requesterKind: "business",
           requesterBusinessId: importerBusinessId,
-        }),
-      ).resolves.toMatchObject({ decision: "allow", relationshipMode: "c2b", score: 100 });
+        })
+      ).resolves.toMatchObject({
+        decision: "deny",
+        relationshipMode: "c2b",
+        decisionReason: "individual_commerce_policy_unapproved",
+        score: 0,
+      });
 
       await expect(
         checkCommercialRelationshipForUser(consumerUserId, {
@@ -158,8 +272,13 @@ describe("commercial capabilities and relationship rules", () => {
           supplierIndividualProfileId: producerProfileId,
           requesterKind: "individual",
           requesterIndividualProfileId: consumerProfileId,
-        }),
-      ).resolves.toMatchObject({ decision: "allow", relationshipMode: "c2c", score: 100 });
+        })
+      ).resolves.toMatchObject({
+        decision: "deny",
+        relationshipMode: "c2c",
+        decisionReason: "individual_commerce_policy_unapproved",
+        score: 0,
+      });
 
       await expect(
         checkCommercialRelationshipForUser(factoryOwnerId, {
@@ -167,8 +286,12 @@ describe("commercial capabilities and relationship rules", () => {
           supplierIndividualProfileId: consumerProfileId,
           requesterKind: "business",
           requesterBusinessId: factoryBusinessId,
-        }),
-      ).resolves.toMatchObject({ decision: "deny", decisionReason: "consumer_to_factory_not_supported", score: 0 });
+        })
+      ).resolves.toMatchObject({
+        decision: "deny",
+        decisionReason: "individual_commerce_policy_unapproved",
+        score: 0,
+      });
 
       await expect(
         checkCommercialRelationshipForUser(importerOwnerId, {
@@ -176,44 +299,102 @@ describe("commercial capabilities and relationship rules", () => {
           supplierIndividualProfileId: consumerProfileId,
           requesterKind: "business",
           requesterBusinessId: importerBusinessId,
-        }),
-      ).resolves.toMatchObject({ decision: "deny", decisionReason: "consumer_to_importer_not_supported", score: 0 });
+        })
+      ).resolves.toMatchObject({
+        decision: "deny",
+        decisionReason: "individual_commerce_policy_unapproved",
+        score: 0,
+      });
 
       const relationshipAuditRows = await database
-        .select({ resourceId: auditEvents.resourceId, decision: auditEvents.decision, metadataJson: auditEvents.metadataJson })
+        .select({
+          resourceId: auditEvents.resourceId,
+          decision: auditEvents.decision,
+          metadataJson: auditEvents.metadataJson,
+        })
         .from(auditEvents)
-        .where(and(
-          eq(auditEvents.actorUserId, importerOwnerId),
-          eq(auditEvents.action, "commercial_relationship_evaluated"),
-        ));
-      const b2bAudit = relationshipAuditRows.find(row => row.resourceId === `business:${factoryBusinessId}|business:${importerBusinessId}`);
+        .where(
+          and(
+            eq(auditEvents.actorUserId, importerOwnerId),
+            eq(auditEvents.action, "commercial_relationship_evaluated")
+          )
+        );
+      const b2bAudit = relationshipAuditRows.find(
+        row =>
+          row.resourceId ===
+          `business:${factoryBusinessId}|business:${importerBusinessId}`
+      );
       expect(b2bAudit?.decision).toBe("allow");
-      expect(JSON.parse(b2bAudit?.metadataJson ?? "{}").membershipRole).toBe("authorized_representative");
+      expect(JSON.parse(b2bAudit?.metadataJson ?? "{}").membershipRole).toBe(
+        "authorized_representative"
+      );
 
       const authorizationRows = await database
-        .select({ decision: auditEvents.decision, metadataJson: auditEvents.metadataJson })
+        .select({
+          decision: auditEvents.decision,
+          metadataJson: auditEvents.metadataJson,
+        })
         .from(auditEvents)
-        .where(and(
-          eq(auditEvents.actorUserId, importerOwnerId),
-          eq(auditEvents.businessId, importerBusinessId),
-          eq(auditEvents.action, "business_authorization_decided"),
-        ));
-      const allowedAuthorization = authorizationRows.find(row => row.decision === "allow");
-      expect(JSON.parse(allowedAuthorization?.metadataJson ?? "{}").membershipRole).toBe("authorized_representative");
+        .where(
+          and(
+            eq(auditEvents.actorUserId, importerOwnerId),
+            eq(auditEvents.businessId, importerBusinessId),
+            eq(auditEvents.action, "business_authorization_decided")
+          )
+        );
+      const allowedAuthorization = authorizationRows.find(
+        row => row.decision === "allow"
+      );
+      expect(
+        JSON.parse(allowedAuthorization?.metadataJson ?? "{}").membershipRole
+      ).toBe("authorized_representative");
     } finally {
-      for (const userId of ids) await database.delete(auditEvents).where(eq(auditEvents.actorUserId, userId));
+      for (const userId of ids)
+        await database
+          .delete(auditEvents)
+          .where(eq(auditEvents.actorUserId, userId));
       for (const membershipId of membershipIds) {
-        await database.delete(businessMembershipPermissions).where(eq(businessMembershipPermissions.membershipId, membershipId));
-        await database.delete(businessMemberships).where(eq(businessMemberships.id, membershipId));
+        await database
+          .delete(businessMembershipPermissions)
+          .where(eq(businessMembershipPermissions.membershipId, membershipId));
+        await database
+          .delete(businessMemberships)
+          .where(eq(businessMemberships.id, membershipId));
       }
-      if (factoryBusinessId) await database.delete(businessActivityVerifications).where(eq(businessActivityVerifications.businessId, factoryBusinessId));
-      if (importerBusinessId) await database.delete(businessActivityVerifications).where(eq(businessActivityVerifications.businessId, importerBusinessId));
-      if (producerProfileId) await database.delete(individualActivityProfiles).where(eq(individualActivityProfiles.id, producerProfileId));
-      if (consumerProfileId) await database.delete(individualActivityProfiles).where(eq(individualActivityProfiles.id, consumerProfileId));
-      for (const userId of ids) await database.delete(kybVerifications).where(eq(kybVerifications.submittedByUserId, userId));
-      if (factoryBusinessId) await database.delete(businessEntities).where(eq(businessEntities.id, factoryBusinessId));
-      if (importerBusinessId) await database.delete(businessEntities).where(eq(businessEntities.id, importerBusinessId));
-      for (const userId of ids) await database.delete(users).where(eq(users.id, userId));
+      if (factoryBusinessId)
+        await database
+          .delete(businessActivityVerifications)
+          .where(
+            eq(businessActivityVerifications.businessId, factoryBusinessId)
+          );
+      if (importerBusinessId)
+        await database
+          .delete(businessActivityVerifications)
+          .where(
+            eq(businessActivityVerifications.businessId, importerBusinessId)
+          );
+      if (producerProfileId)
+        await database
+          .delete(individualActivityProfiles)
+          .where(eq(individualActivityProfiles.id, producerProfileId));
+      if (consumerProfileId)
+        await database
+          .delete(individualActivityProfiles)
+          .where(eq(individualActivityProfiles.id, consumerProfileId));
+      for (const userId of ids)
+        await database
+          .delete(kybVerifications)
+          .where(eq(kybVerifications.submittedByUserId, userId));
+      if (factoryBusinessId)
+        await database
+          .delete(businessEntities)
+          .where(eq(businessEntities.id, factoryBusinessId));
+      if (importerBusinessId)
+        await database
+          .delete(businessEntities)
+          .where(eq(businessEntities.id, importerBusinessId));
+      for (const userId of ids)
+        await database.delete(users).where(eq(users.id, userId));
     }
   }, 60_000);
 });

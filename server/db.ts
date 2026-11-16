@@ -36,8 +36,18 @@ import {
   users,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
-import { assertPolicy, evaluatePolicy, PolicyAction, PolicyContext, PolicyDecision } from "./policyEngine";
-import { BusinessPermissionCode, evaluateBusinessAuthorization } from "./organizationAuthorization";
+import {
+  assertPolicy,
+  evaluatePolicy,
+  PolicyAction,
+  PolicyContext,
+  PolicyDecision,
+} from "./policyEngine";
+import {
+  BusinessPermissionCode,
+  businessPermissionCodes,
+  evaluateBusinessAuthorization,
+} from "./organizationAuthorization";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -98,7 +108,10 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     updateSet.lastSignedIn = new Date();
   }
 
-  await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+  await db
+    .insert(users)
+    .values(values)
+    .onDuplicateKeyUpdate({ set: updateSet });
 }
 
 export async function getUserByOpenId(openId: string) {
@@ -108,17 +121,29 @@ export async function getUserByOpenId(openId: string) {
     return undefined;
   }
 
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+  const result = await db
+    .select()
+    .from(users)
+    .where(eq(users.openId, openId))
+    .limit(1);
   return result[0];
 }
 
 async function getOrCreatePersonForUser(userId: number) {
   const db = requireDatabase(await getDb());
-  const existing = await db.select().from(persons).where(eq(persons.userId, userId)).limit(1);
+  const existing = await db
+    .select()
+    .from(persons)
+    .where(eq(persons.userId, userId))
+    .limit(1);
   if (existing[0]) return existing[0];
 
   await db.insert(persons).values({ userId });
-  const created = await db.select().from(persons).where(eq(persons.userId, userId)).limit(1);
+  const created = await db
+    .select()
+    .from(persons)
+    .where(eq(persons.userId, userId))
+    .limit(1);
   if (!created[0]) throw new Error("Failed to create person identity");
   return created[0];
 }
@@ -130,7 +155,9 @@ function requireDatabase<T>(database: T | null): T {
   return database;
 }
 
-export async function listSpecificationBookmarks(userId: number): Promise<number[]> {
+export async function listSpecificationBookmarks(
+  userId: number
+): Promise<number[]> {
   const db = requireDatabase(await getDb());
   const rows = await db
     .select({ sectionId: specificationBookmarks.sectionId })
@@ -140,7 +167,13 @@ export async function listSpecificationBookmarks(userId: number): Promise<number
   return rows.map(row => row.sectionId);
 }
 
-async function enforceTradePolicy(userId: number, action: PolicyAction, resourceType: string, resourceId: string, context: Omit<PolicyContext, "action" | "actorUserId">): Promise<PolicyDecision> {
+async function enforceTradePolicy(
+  userId: number,
+  action: PolicyAction,
+  resourceType: string,
+  resourceId: string,
+  context: Omit<PolicyContext, "action" | "actorUserId">
+): Promise<PolicyDecision> {
   const decision = evaluatePolicy({ ...context, action, actorUserId: userId });
   await appendAuditEvent({
     actorUserId: userId,
@@ -172,7 +205,12 @@ async function appendAuditEvent(input: {
   decision?: "allow" | "deny" | "manual_review";
   reasonCode?: string | null;
   requestId?: string | null;
-  dataClassification?: "public" | "verified" | "restricted" | "confidential_sovereign" | "highly_sensitive_health";
+  dataClassification?:
+    | "public"
+    | "verified"
+    | "restricted"
+    | "confidential_sovereign"
+    | "highly_sensitive_health";
   metadata?: Record<string, string | number | boolean | null>;
 }) {
   const db = requireDatabase(await getDb());
@@ -196,7 +234,11 @@ async function authorizeBusinessPermission(
   userId: number,
   businessId: number,
   requiredPermission: BusinessPermissionCode,
-  options: { requireKyc?: boolean; requireVerifiedBusiness?: boolean; requestId?: string } = {},
+  options: {
+    requireKyc?: boolean;
+    requireVerifiedBusiness?: boolean;
+    requestId?: string;
+  } = {}
 ) {
   const db = requireDatabase(await getDb());
   const person = await getOrCreatePersonForUser(userId);
@@ -214,25 +256,55 @@ async function authorizeBusinessPermission(
       permissionExpiresAt: businessMembershipPermissions.expiresAt,
     })
     .from(businessMemberships)
-    .innerJoin(businessEntities, eq(businessMemberships.businessId, businessEntities.id))
+    .innerJoin(
+      businessEntities,
+      eq(businessMemberships.businessId, businessEntities.id)
+    )
     .innerJoin(persons, eq(businessMemberships.personId, persons.id))
     .leftJoin(
       businessMembershipPermissions,
       and(
         eq(businessMembershipPermissions.membershipId, businessMemberships.id),
-        eq(businessMembershipPermissions.permissionCode, requiredPermission),
-      ),
+        eq(businessMembershipPermissions.permissionCode, requiredPermission)
+      )
     )
     .where(
       and(
         eq(businessMemberships.businessId, businessId),
         eq(businessMemberships.userId, userId),
         eq(businessMemberships.personId, person.id),
-        eq(persons.userId, userId),
-      ),
+        eq(persons.userId, userId)
+      )
     )
     .limit(1);
   const membership = rows[0];
+  const [latestKyc, latestKyb] = await Promise.all([
+    getLatestKycVerificationForPerson(person.id),
+    getLatestKybVerificationForBusiness(businessId),
+  ]);
+  const now = new Date();
+  let effectiveKycStatus = membership?.personKycStatus;
+  if (effectiveKycStatus === "verified" && latestKyc?.status !== "verified") {
+    effectiveKycStatus = latestKyc?.status ?? "unverified";
+  }
+  if (
+    effectiveKycStatus === "verified" &&
+    latestKyc?.expiresAt &&
+    latestKyc.expiresAt <= now
+  ) {
+    effectiveKycStatus = "expired";
+  }
+  let effectiveKybStatus = membership?.businessVerificationStatus;
+  if (effectiveKybStatus === "verified" && latestKyb?.status !== "verified") {
+    effectiveKybStatus = latestKyb?.status ?? "unverified";
+  }
+  if (
+    effectiveKybStatus === "verified" &&
+    latestKyb?.expiresAt &&
+    latestKyb.expiresAt <= now
+  ) {
+    effectiveKybStatus = "expired";
+  }
   const decision = evaluateBusinessAuthorization({
     requestedBusinessId: businessId,
     membershipBusinessId: membership?.membershipBusinessId,
@@ -240,8 +312,10 @@ async function authorizeBusinessPermission(
     expectedUserId: userId,
     membershipStatus: membership?.membershipStatus,
     membershipRole: membership?.membershipRole,
-    personKycStatus: membership?.personKycStatus,
-    businessVerificationStatus: membership?.businessVerificationStatus,
+    personKycStatus: effectiveKycStatus,
+    personKycExpiresAt: latestKyc?.expiresAt,
+    businessVerificationStatus: effectiveKybStatus,
+    businessVerificationExpiresAt: latestKyb?.expiresAt,
     requiredPermission,
     grantedPermission: membership?.grantedPermission,
     permissionStatus: membership?.permissionStatus,
@@ -267,19 +341,30 @@ async function authorizeBusinessPermission(
     },
   });
   if (!decision.allowed) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Business operation is not authorized" });
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Business operation is not authorized",
+    });
   }
-  return { membershipId: membership!.membershipId, membershipRole: membership!.membershipRole };
+  return {
+    membershipId: membership!.membershipId,
+    membershipRole: membership!.membershipRole,
+  };
 }
 
 async function canAuthorizeBusinessPermission(
   userId: number,
   businessId: number,
   permissionCode: BusinessPermissionCode,
-  options: { requireKyc?: boolean; requireVerifiedBusiness?: boolean } = {},
+  options: { requireKyc?: boolean; requireVerifiedBusiness?: boolean } = {}
 ) {
   try {
-    await authorizeBusinessPermission(userId, businessId, permissionCode, options);
+    await authorizeBusinessPermission(
+      userId,
+      businessId,
+      permissionCode,
+      options
+    );
     return true;
   } catch (error) {
     if (error instanceof TRPCError && error.code === "FORBIDDEN") return false;
@@ -287,7 +372,10 @@ async function canAuthorizeBusinessPermission(
   }
 }
 
-export async function toggleSpecificationBookmark(userId: number, sectionId: number) {
+export async function toggleSpecificationBookmark(
+  userId: number,
+  sectionId: number
+) {
   const db = requireDatabase(await getDb());
   const existing = await db
     .select({ id: specificationBookmarks.id })
@@ -295,13 +383,15 @@ export async function toggleSpecificationBookmark(userId: number, sectionId: num
     .where(
       and(
         eq(specificationBookmarks.userId, userId),
-        eq(specificationBookmarks.sectionId, sectionId),
-      ),
+        eq(specificationBookmarks.sectionId, sectionId)
+      )
     )
     .limit(1);
 
   if (existing[0]) {
-    await db.delete(specificationBookmarks).where(eq(specificationBookmarks.id, existing[0].id));
+    await db
+      .delete(specificationBookmarks)
+      .where(eq(specificationBookmarks.id, existing[0].id));
     await appendAuditEvent({
       actorUserId: userId,
       action: "specification_bookmark_removed",
@@ -328,15 +418,25 @@ type CommercePurchaseOrderInput = {
 
 export async function listCommercePurchaseOrdersForUser(userId: number) {
   const db = requireDatabase(await getDb());
-  const rows = await db.select().from(commercePurchaseOrders).where(eq(commercePurchaseOrders.buyerUserId, userId)).orderBy(desc(commercePurchaseOrders.createdAt));
+  const rows = await db
+    .select()
+    .from(commercePurchaseOrders)
+    .where(eq(commercePurchaseOrders.buyerUserId, userId))
+    .orderBy(desc(commercePurchaseOrders.createdAt));
   const visible = [];
   for (const row of rows) {
     if (row.buyerBusinessId === null) continue;
     try {
-      await authorizeBusinessPermission(userId, row.buyerBusinessId, "commerce.purchase_order.read", { requireVerifiedBusiness: true });
+      await authorizeBusinessPermission(
+        userId,
+        row.buyerBusinessId,
+        "commerce.purchase_order.read",
+        { requireVerifiedBusiness: true }
+      );
       visible.push(row);
     } catch (error) {
-      if (!(error instanceof TRPCError) || error.code !== "FORBIDDEN") throw error;
+      if (!(error instanceof TRPCError) || error.code !== "FORBIDDEN")
+        throw error;
     }
   }
   return visible;
@@ -345,7 +445,8 @@ export async function listCommercePurchaseOrdersForUser(userId: number) {
 export async function listVerifiedCommerceCatalogForUser(userId: number) {
   const db = requireDatabase(await getDb());
   const person = await getOrCreatePersonForUser(userId);
-  if (person.kycStatus !== "verified") return [];
+  if ((await getEffectiveKycStatus(person.id, person.kycStatus)) !== "verified")
+    return [];
 
   const offerings = await db
     .select({
@@ -361,34 +462,69 @@ export async function listVerifiedCommerceCatalogForUser(userId: number) {
       offeringType: tradeOfferings.offeringType,
     })
     .from(tradeOfferings)
-    .innerJoin(businessEntities, eq(tradeOfferings.businessId, businessEntities.id))
+    .innerJoin(
+      businessEntities,
+      eq(tradeOfferings.businessId, businessEntities.id)
+    )
     .where(
       and(
         eq(tradeOfferings.supplierKind, "business"),
         eq(tradeOfferings.offeringType, "product"),
         eq(tradeOfferings.verificationStatus, "verified"),
         eq(tradeOfferings.lifecycleStatus, "published"),
-        eq(businessEntities.verificationStatus, "verified"),
-      ),
+        eq(businessEntities.verificationStatus, "verified")
+      )
     )
     .orderBy(desc(tradeOfferings.updatedAt), desc(tradeOfferings.id));
 
   const catalog = [];
   for (const offering of offerings) {
-    if (offering.moq === null || offering.unitPriceMinor === null || offering.quantityUnit === null) continue;
+    if (
+      offering.moq === null ||
+      offering.unitPriceMinor === null ||
+      offering.quantityUnit === null
+    )
+      continue;
     if (offering.supplierEntityType === "government_entity") continue;
-    const activities = await listCurrentVerifiedBusinessActivities(offering.supplierBusinessId);
-    if (!activities.some(activity => businessActivitySupportsOffering(activity, offering.offeringType))) continue;
+    if (
+      (await getEffectiveKybStatus(offering.supplierBusinessId, "verified")) !==
+      "verified"
+    )
+      continue;
+    const activities = await listCurrentVerifiedBusinessActivities(
+      offering.supplierBusinessId
+    );
+    if (
+      !activities.some(activity =>
+        businessActivitySupportsOffering(activity, offering.offeringType)
+      )
+    )
+      continue;
     catalog.push(offering);
   }
   return catalog;
 }
 
-export async function createCommercePurchaseOrderForUser(userId: number, input: CommercePurchaseOrderInput) {
+export async function createCommercePurchaseOrderForUser(
+  userId: number,
+  input: CommercePurchaseOrderInput
+) {
   const db = requireDatabase(await getDb());
-  await assertVerifiedBusinessOperationalActivityForUser(userId, input.buyerBusinessId, "commerce.purchase_order.create");
-  const buyer = await db.select({ entityType: businessEntities.entityType }).from(businessEntities).where(eq(businessEntities.id, input.buyerBusinessId)).limit(1);
-  if (!buyer[0]) throw new TRPCError({ code: "FORBIDDEN", message: "Buyer business context is not authorized" });
+  await assertVerifiedBusinessOperationalActivityForUser(
+    userId,
+    input.buyerBusinessId,
+    "commerce.purchase_order.create"
+  );
+  const buyer = await db
+    .select({ entityType: businessEntities.entityType })
+    .from(businessEntities)
+    .where(eq(businessEntities.id, input.buyerBusinessId))
+    .limit(1);
+  if (!buyer[0])
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Buyer business context is not authorized",
+    });
 
   const offering = await db
     .select({
@@ -408,7 +544,10 @@ export async function createCommercePurchaseOrderForUser(userId: number, input: 
       supplierKind: tradeOfferings.supplierKind,
     })
     .from(tradeOfferings)
-    .innerJoin(businessEntities, eq(tradeOfferings.businessId, businessEntities.id))
+    .innerJoin(
+      businessEntities,
+      eq(tradeOfferings.businessId, businessEntities.id)
+    )
     .where(eq(tradeOfferings.id, input.offeringId))
     .limit(1);
 
@@ -424,27 +563,53 @@ export async function createCommercePurchaseOrderForUser(userId: number, input: 
     selected.unitPriceMinor === null ||
     selected.quantityUnit === null
   ) {
-    throw new Error("Purchase orders require a verified and published product offering with approved commercial terms");
+    throw new Error(
+      "Purchase orders require a verified and published product offering with approved commercial terms"
+    );
   }
 
-  if (buyer[0].entityType === "government_entity" || selected.supplierEntityType === "government_entity") {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Government purchase-order eligibility is not enabled pending policy approval" });
+  if (
+    buyer[0].entityType === "government_entity" ||
+    selected.supplierEntityType === "government_entity"
+  ) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message:
+        "Government purchase-order eligibility is not enabled pending policy approval",
+    });
   }
 
-  const activities = await listCurrentVerifiedBusinessActivities(selected.supplierBusinessId);
-  if (!activities.some(activity => businessActivitySupportsOffering(activity, selected.offeringType))) {
-    throw new Error("The supplier has no verified operational activity for this product");
+  const activities = await listCurrentVerifiedBusinessActivities(
+    selected.supplierBusinessId
+  );
+  if (
+    !activities.some(activity =>
+      businessActivitySupportsOffering(activity, selected.offeringType)
+    )
+  ) {
+    throw new Error(
+      "The supplier has no verified operational activity for this product"
+    );
   }
-  const relationship = await evaluateCommercialRelationshipForUser(userId, {
-    supplierKind: "business",
-    supplierBusinessId: selected.supplierBusinessId,
-    requesterKind: "business",
-    requesterBusinessId: input.buyerBusinessId,
-  }, "commerce.purchase_order.create");
+  const relationship = await evaluateCommercialRelationshipForUser(
+    userId,
+    {
+      supplierKind: "business",
+      supplierBusinessId: selected.supplierBusinessId,
+      requesterKind: "business",
+      requesterBusinessId: input.buyerBusinessId,
+    },
+    "commerce.purchase_order.create"
+  );
   if (relationship.decision !== "allow") {
-    throw new TRPCError({ code: "FORBIDDEN", message: "The buyer-supplier relationship is not eligible for purchase orders" });
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message:
+        "The buyer-supplier relationship is not eligible for purchase orders",
+    });
   }
-  if (input.quantity < selected.moq) throw new Error(`الكمية يجب ألا تقل عن MOQ (${selected.moq})`);
+  if (input.quantity < selected.moq)
+    throw new Error(`الكمية يجب ألا تقل عن MOQ (${selected.moq})`);
 
   const inserted = await db.insert(commercePurchaseOrders).values({
     buyerUserId: userId,
@@ -463,8 +628,25 @@ export async function createCommercePurchaseOrderForUser(userId: number, input: 
     message: input.message,
   });
   const orderId = Number(inserted[0].insertId);
-  await appendAuditEvent({ actorUserId: userId, action: "commerce_purchase_order_created", resourceType: "commerce_purchase_order", resourceId: String(orderId), businessId: input.buyerBusinessId, permissionCode: "commerce.purchase_order.create", metadata: { buyerBusinessId: input.buyerBusinessId, supplierBusinessId: selected.supplierBusinessId, offeringId: selected.offeringId, quantity: input.quantity } });
-  const created = await db.select().from(commercePurchaseOrders).where(eq(commercePurchaseOrders.id, orderId)).limit(1);
+  await appendAuditEvent({
+    actorUserId: userId,
+    action: "commerce_purchase_order_created",
+    resourceType: "commerce_purchase_order",
+    resourceId: String(orderId),
+    businessId: input.buyerBusinessId,
+    permissionCode: "commerce.purchase_order.create",
+    metadata: {
+      buyerBusinessId: input.buyerBusinessId,
+      supplierBusinessId: selected.supplierBusinessId,
+      offeringId: selected.offeringId,
+      quantity: input.quantity,
+    },
+  });
+  const created = await db
+    .select()
+    .from(commercePurchaseOrders)
+    .where(eq(commercePurchaseOrders.id, orderId))
+    .limit(1);
   if (!created[0]) throw new Error("تعذر تحميل أمر الشراء بعد الحفظ");
   return created[0];
 }
@@ -486,48 +668,69 @@ type BusinessEntityInput = {
 export async function listBusinessEntitiesForUser(userId: number) {
   const db = requireDatabase(await getDb());
   const person = await getOrCreatePersonForUser(userId);
-  const visibleMemberships = person.kycStatus === "verified"
-    ? await db
-    .select({
-      id: businessEntities.id,
-      legalName: businessEntities.legalName,
-      tradeName: businessEntities.tradeName,
-      registrationNumber: businessEntities.registrationNumber,
-      entityType: businessEntities.entityType,
-      verificationStatus: businessEntities.verificationStatus,
-      dataClassification: businessEntities.dataClassification,
-      membershipRole: businessMemberships.membershipRole,
-      membershipStatus: businessMemberships.status,
-      permissionExpiresAt: businessMembershipPermissions.expiresAt,
-      createdAt: businessEntities.createdAt,
-      updatedAt: businessEntities.updatedAt,
-    })
-    .from(businessMemberships)
-    .innerJoin(businessEntities, eq(businessMemberships.businessId, businessEntities.id))
-    .innerJoin(
-      businessMembershipPermissions,
-      and(
-        eq(businessMembershipPermissions.membershipId, businessMemberships.id),
-        eq(businessMembershipPermissions.permissionCode, "business.read"),
-        eq(businessMembershipPermissions.status, "active"),
-      ),
-    )
-    .where(and(eq(businessMemberships.userId, userId), eq(businessMemberships.status, "active")))
-    : [];
+  const currentKycStatus = await getEffectiveKycStatus(
+    person.id,
+    person.kycStatus
+  );
+  const visibleMemberships =
+    currentKycStatus === "verified"
+      ? await db
+          .select({
+            id: businessEntities.id,
+            legalName: businessEntities.legalName,
+            tradeName: businessEntities.tradeName,
+            registrationNumber: businessEntities.registrationNumber,
+            entityType: businessEntities.entityType,
+            verificationStatus: businessEntities.verificationStatus,
+            dataClassification: businessEntities.dataClassification,
+            membershipRole: businessMemberships.membershipRole,
+            membershipStatus: businessMemberships.status,
+            permissionExpiresAt: businessMembershipPermissions.expiresAt,
+            createdAt: businessEntities.createdAt,
+            updatedAt: businessEntities.updatedAt,
+          })
+          .from(businessMemberships)
+          .innerJoin(
+            businessEntities,
+            eq(businessMemberships.businessId, businessEntities.id)
+          )
+          .innerJoin(
+            businessMembershipPermissions,
+            and(
+              eq(
+                businessMembershipPermissions.membershipId,
+                businessMemberships.id
+              ),
+              eq(businessMembershipPermissions.permissionCode, "business.read"),
+              eq(businessMembershipPermissions.status, "active")
+            )
+          )
+          .where(
+            and(
+              eq(businessMemberships.userId, userId),
+              eq(businessMemberships.status, "active")
+            )
+          )
+      : [];
   const now = new Date();
-  const rows = new Map<number, {
-    id: number;
-    legalName: string;
-    tradeName: string | null;
-    registrationNumber: string | null;
-    entityType: (typeof businessEntities.$inferSelect)["entityType"];
-    verificationStatus: (typeof businessEntities.$inferSelect)["verificationStatus"];
-    dataClassification: (typeof businessEntities.$inferSelect)["dataClassification"];
-    membershipRole: (typeof businessMemberships.$inferSelect)["membershipRole"] | null;
-    membershipStatus: string;
-    createdAt: Date;
-    updatedAt: Date;
-  }>();
+  const rows = new Map<
+    number,
+    {
+      id: number;
+      legalName: string;
+      tradeName: string | null;
+      registrationNumber: string | null;
+      entityType: (typeof businessEntities.$inferSelect)["entityType"];
+      verificationStatus: (typeof businessEntities.$inferSelect)["verificationStatus"];
+      dataClassification: (typeof businessEntities.$inferSelect)["dataClassification"];
+      membershipRole:
+        | (typeof businessMemberships.$inferSelect)["membershipRole"]
+        | null;
+      membershipStatus: string;
+      createdAt: Date;
+      updatedAt: Date;
+    }
+  >();
   for (const row of visibleMemberships) {
     if (!row.permissionExpiresAt || row.permissionExpiresAt > now) {
       rows.set(row.id, { ...row, membershipStatus: row.membershipStatus });
@@ -549,17 +752,37 @@ export async function listBusinessEntitiesForUser(userId: number) {
     .where(eq(businessEntities.createdByUserId, userId));
   for (const row of applications) {
     if (!rows.has(row.id)) {
-      rows.set(row.id, { ...row, membershipRole: null, membershipStatus: "not_assigned" });
+      rows.set(row.id, {
+        ...row,
+        membershipRole: null,
+        membershipStatus: "not_assigned",
+      });
     }
   }
-  return Array.from(rows.values());
+  return Promise.all(
+    Array.from(rows.values()).map(async row => ({
+      ...row,
+      verificationStatus: await getEffectiveKybStatus(
+        row.id,
+        row.verificationStatus
+      ),
+    }))
+  );
 }
 
-export async function getBusinessContextForUser(userId: number, businessId: number) {
+export async function getBusinessContextForUser(
+  userId: number,
+  businessId: number
+) {
   const db = requireDatabase(await getDb());
-  const authorization = await authorizeBusinessPermission(userId, businessId, "business.read", {
-    requireKyc: true,
-  });
+  const authorization = await authorizeBusinessPermission(
+    userId,
+    businessId,
+    "business.read",
+    {
+      requireKyc: true,
+    }
+  );
   const business = await db
     .select({
       id: businessEntities.id,
@@ -571,30 +794,459 @@ export async function getBusinessContextForUser(userId: number, businessId: numb
     .from(businessEntities)
     .where(eq(businessEntities.id, businessId))
     .limit(1);
-  if (!business[0]) throw new TRPCError({ code: "FORBIDDEN", message: "Business context is not authorized" });
+  if (!business[0])
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Business context is not authorized",
+    });
+  const effectiveBusiness = {
+    ...business[0],
+    verificationStatus: await getEffectiveKybStatus(
+      businessId,
+      business[0].verificationStatus
+    ),
+  };
   const grantRows = await db
-    .select({ permissionCode: businessMembershipPermissions.permissionCode, expiresAt: businessMembershipPermissions.expiresAt })
+    .select({
+      permissionCode: businessMembershipPermissions.permissionCode,
+      expiresAt: businessMembershipPermissions.expiresAt,
+    })
     .from(businessMembershipPermissions)
     .where(
       and(
-        eq(businessMembershipPermissions.membershipId, authorization.membershipId),
-        eq(businessMembershipPermissions.status, "active"),
-      ),
+        eq(
+          businessMembershipPermissions.membershipId,
+          authorization.membershipId
+        ),
+        eq(businessMembershipPermissions.status, "active")
+      )
     );
   const now = new Date();
   return {
-    business: business[0],
+    business: effectiveBusiness,
     membershipId: authorization.membershipId,
     membershipRole: authorization.membershipRole,
-    permissions: grantRows.filter(row => !row.expiresAt || row.expiresAt > now).map(row => row.permissionCode),
+    permissions: grantRows
+      .filter(row => !row.expiresAt || row.expiresAt > now)
+      .map(row => row.permissionCode),
   };
 }
 
-export async function createBusinessEntityForUser(userId: number, input: BusinessEntityInput) {
+type ManagedMembershipRole =
+  | "authorized_representative"
+  | "operations_manager"
+  | "viewer";
+
+async function requirePlatformAdministrator(actorUserId: number) {
+  const db = requireDatabase(await getDb());
+  const actor = await db
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.id, actorUserId))
+    .limit(1);
+  if (actor[0]?.role !== "admin") {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Only a platform administrator may manage business memberships",
+    });
+  }
+  return db;
+}
+
+function assertManagedMembershipRole(
+  role: string
+): asserts role is ManagedMembershipRole {
+  if (
+    role !== "authorized_representative" &&
+    role !== "operations_manager" &&
+    role !== "viewer"
+  ) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "Owner assignment is disabled pending an approved ownership policy",
+    });
+  }
+}
+
+function assertManagedPermissionCode(
+  permissionCode: string
+): asserts permissionCode is BusinessPermissionCode {
+  if (
+    !businessPermissionCodes.includes(permissionCode as BusinessPermissionCode)
+  ) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Unknown business permission code",
+    });
+  }
+}
+
+async function requireCurrentlyVerifiedPerson(personId: number) {
+  const db = requireDatabase(await getDb());
+  const person = await db
+    .select({ kycStatus: persons.kycStatus })
+    .from(persons)
+    .where(eq(persons.id, personId))
+    .limit(1);
+  if (
+    !person[0] ||
+    (await getEffectiveKycStatus(personId, person[0].kycStatus)) !== "verified"
+  ) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message:
+        "An active verified KYC identity is required for membership changes",
+    });
+  }
+}
+
+export async function listBusinessMembershipsForAdministrator(
+  actorUserId: number,
+  businessId: number
+) {
+  const db = await requirePlatformAdministrator(actorUserId);
+  const memberships = await db
+    .select({
+      id: businessMemberships.id,
+      userId: businessMemberships.userId,
+      personId: businessMemberships.personId,
+      membershipRole: businessMemberships.membershipRole,
+      status: businessMemberships.status,
+      createdAt: businessMemberships.createdAt,
+      updatedAt: businessMemberships.updatedAt,
+    })
+    .from(businessMemberships)
+    .where(eq(businessMemberships.businessId, businessId));
+  if (memberships.length === 0) return [];
+  const grants = await db
+    .select({
+      id: businessMembershipPermissions.id,
+      membershipId: businessMembershipPermissions.membershipId,
+      permissionCode: businessMembershipPermissions.permissionCode,
+      status: businessMembershipPermissions.status,
+      grantedByUserId: businessMembershipPermissions.grantedByUserId,
+      grantedAt: businessMembershipPermissions.grantedAt,
+      expiresAt: businessMembershipPermissions.expiresAt,
+      revokedAt: businessMembershipPermissions.revokedAt,
+    })
+    .from(businessMembershipPermissions)
+    .where(
+      inArray(
+        businessMembershipPermissions.membershipId,
+        memberships.map(row => row.id)
+      )
+    );
+  return memberships.map(membership => ({
+    ...membership,
+    permissions: grants.filter(grant => grant.membershipId === membership.id),
+  }));
+}
+
+export async function provisionBusinessMembershipForAdministrator(
+  actorUserId: number,
+  input: {
+    businessId: number;
+    userId: number;
+    membershipRole: ManagedMembershipRole;
+    reviewReference: string;
+  }
+) {
+  const db = await requirePlatformAdministrator(actorUserId);
+  assertManagedMembershipRole(input.membershipRole);
+  const business = await db
+    .select({ id: businessEntities.id })
+    .from(businessEntities)
+    .where(eq(businessEntities.id, input.businessId))
+    .limit(1);
+  if (!business[0])
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Business entity was not found",
+    });
+  const person = await getOrCreatePersonForUser(input.userId);
+  await requireCurrentlyVerifiedPerson(person.id);
+  const existing = await db
+    .select({
+      id: businessMemberships.id,
+      membershipRole: businessMemberships.membershipRole,
+    })
+    .from(businessMemberships)
+    .where(
+      and(
+        eq(businessMemberships.businessId, input.businessId),
+        eq(businessMemberships.userId, input.userId)
+      )
+    )
+    .limit(1);
+  if (existing[0]?.membershipRole === "owner") {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message:
+        "Existing owner records cannot be reassigned through membership administration",
+    });
+  }
+  let membershipId: number;
+  if (existing[0]) {
+    membershipId = existing[0].id;
+    await db
+      .update(businessMemberships)
+      .set({
+        personId: person.id,
+        membershipRole: input.membershipRole,
+        status: "active",
+      })
+      .where(eq(businessMemberships.id, membershipId));
+  } else {
+    const inserted = await db.insert(businessMemberships).values({
+      businessId: input.businessId,
+      userId: input.userId,
+      personId: person.id,
+      membershipRole: input.membershipRole,
+      status: "active",
+    });
+    membershipId = Number(inserted[0].insertId);
+  }
+  await appendAuditEvent({
+    actorUserId,
+    action: "business_membership_provisioned_by_admin",
+    resourceType: "business_membership",
+    resourceId: String(membershipId),
+    businessId: input.businessId,
+    membershipId,
+    decision: "allow",
+    reasonCode: "ADMIN_REVIEWED_MEMBERSHIP",
+    metadata: {
+      membershipRole: input.membershipRole,
+      reviewReference: input.reviewReference.slice(0, 120),
+    },
+  });
+  return { membershipId };
+}
+
+export async function setBusinessMembershipStatusForAdministrator(
+  actorUserId: number,
+  input: {
+    membershipId: number;
+    status: "active" | "suspended" | "inactive";
+    reviewReference: string;
+  }
+) {
+  const db = await requirePlatformAdministrator(actorUserId);
+  const rows = await db
+    .select({
+      id: businessMemberships.id,
+      businessId: businessMemberships.businessId,
+      userId: businessMemberships.userId,
+      personId: businessMemberships.personId,
+      membershipRole: businessMemberships.membershipRole,
+    })
+    .from(businessMemberships)
+    .where(eq(businessMemberships.id, input.membershipId))
+    .limit(1);
+  const membership = rows[0];
+  if (!membership)
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Business membership was not found",
+    });
+  if (membership.membershipRole === "owner") {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message:
+        "Owner membership changes are disabled pending an approved ownership policy",
+    });
+  }
+  if (input.status === "active")
+    await requireCurrentlyVerifiedPerson(membership.personId);
+  await db
+    .update(businessMemberships)
+    .set({ status: input.status })
+    .where(eq(businessMemberships.id, membership.id));
+  if (input.status !== "active") {
+    await db
+      .update(businessMembershipPermissions)
+      .set({ status: "revoked", revokedAt: new Date() })
+      .where(
+        and(
+          eq(businessMembershipPermissions.membershipId, membership.id),
+          eq(businessMembershipPermissions.status, "active")
+        )
+      );
+  }
+  await appendAuditEvent({
+    actorUserId,
+    action: "business_membership_status_changed_by_admin",
+    resourceType: "business_membership",
+    resourceId: String(membership.id),
+    businessId: membership.businessId,
+    membershipId: membership.id,
+    decision: "allow",
+    reasonCode: "ADMIN_REVIEWED_MEMBERSHIP_STATUS",
+    metadata: {
+      status: input.status,
+      reviewReference: input.reviewReference.slice(0, 120),
+    },
+  });
+  return { membershipId: membership.id, status: input.status };
+}
+
+export async function grantBusinessPermissionForAdministrator(
+  actorUserId: number,
+  input: {
+    membershipId: number;
+    permissionCode: string;
+    expiresAt: Date | null;
+    reviewReference: string;
+  }
+) {
+  const db = await requirePlatformAdministrator(actorUserId);
+  assertManagedPermissionCode(input.permissionCode);
+  if (input.expiresAt && input.expiresAt <= new Date()) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Permission expiry must be in the future",
+    });
+  }
+  const rows = await db
+    .select({
+      id: businessMemberships.id,
+      businessId: businessMemberships.businessId,
+      personId: businessMemberships.personId,
+      membershipRole: businessMemberships.membershipRole,
+      status: businessMemberships.status,
+    })
+    .from(businessMemberships)
+    .where(eq(businessMemberships.id, input.membershipId))
+    .limit(1);
+  const membership = rows[0];
+  if (!membership)
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Business membership was not found",
+    });
+  if (
+    membership.status !== "active" ||
+    membership.membershipRole === "owner" ||
+    membership.membershipRole === "viewer"
+  ) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message:
+        "Only active non-owner operational memberships may receive explicit permissions",
+    });
+  }
+  await requireCurrentlyVerifiedPerson(membership.personId);
+  const existing = await db
+    .select({ id: businessMembershipPermissions.id })
+    .from(businessMembershipPermissions)
+    .where(
+      and(
+        eq(businessMembershipPermissions.membershipId, membership.id),
+        eq(businessMembershipPermissions.permissionCode, input.permissionCode)
+      )
+    )
+    .limit(1);
+  let grantId: number;
+  if (existing[0]) {
+    grantId = existing[0].id;
+    await db
+      .update(businessMembershipPermissions)
+      .set({
+        status: "active",
+        grantedByUserId: actorUserId,
+        grantedAt: new Date(),
+        expiresAt: input.expiresAt,
+        revokedAt: null,
+      })
+      .where(eq(businessMembershipPermissions.id, grantId));
+  } else {
+    const inserted = await db.insert(businessMembershipPermissions).values({
+      membershipId: membership.id,
+      permissionCode: input.permissionCode,
+      status: "active",
+      grantedByUserId: actorUserId,
+      expiresAt: input.expiresAt,
+    });
+    grantId = Number(inserted[0].insertId);
+  }
+  await appendAuditEvent({
+    actorUserId,
+    action: "business_permission_granted_by_admin",
+    resourceType: "business_membership_permission",
+    resourceId: String(grantId),
+    businessId: membership.businessId,
+    membershipId: membership.id,
+    permissionCode: input.permissionCode,
+    decision: "allow",
+    reasonCode: "ADMIN_REVIEWED_PERMISSION_GRANT",
+    metadata: {
+      expiresAt: input.expiresAt?.toISOString() ?? null,
+      reviewReference: input.reviewReference.slice(0, 120),
+    },
+  });
+  return { grantId };
+}
+
+export async function revokeBusinessPermissionForAdministrator(
+  actorUserId: number,
+  input: { grantId: number; reviewReference: string }
+) {
+  const db = await requirePlatformAdministrator(actorUserId);
+  const rows = await db
+    .select({
+      id: businessMembershipPermissions.id,
+      membershipId: businessMembershipPermissions.membershipId,
+      businessId: businessMemberships.businessId,
+      permissionCode: businessMembershipPermissions.permissionCode,
+      status: businessMembershipPermissions.status,
+    })
+    .from(businessMembershipPermissions)
+    .innerJoin(
+      businessMemberships,
+      eq(businessMembershipPermissions.membershipId, businessMemberships.id)
+    )
+    .where(eq(businessMembershipPermissions.id, input.grantId))
+    .limit(1);
+  const grant = rows[0];
+  if (!grant)
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Business permission grant was not found",
+    });
+  if (grant.status === "active") {
+    await db
+      .update(businessMembershipPermissions)
+      .set({ status: "revoked", revokedAt: new Date() })
+      .where(eq(businessMembershipPermissions.id, grant.id));
+  }
+  await appendAuditEvent({
+    actorUserId,
+    action: "business_permission_revoked_by_admin",
+    resourceType: "business_membership_permission",
+    resourceId: String(grant.id),
+    businessId: grant.businessId,
+    membershipId: grant.membershipId,
+    permissionCode: grant.permissionCode,
+    decision: "allow",
+    reasonCode: "ADMIN_REVIEWED_PERMISSION_REVOCATION",
+    metadata: { reviewReference: input.reviewReference.slice(0, 120) },
+  });
+  return { grantId: grant.id, status: "revoked" as const };
+}
+
+export async function createBusinessEntityForUser(
+  userId: number,
+  input: BusinessEntityInput
+) {
   const db = requireDatabase(await getDb());
   const person = await getOrCreatePersonForUser(userId);
-  if (person.kycStatus !== "verified") {
-    throw new Error("A verified KYC identity is required before creating a business entity");
+  if (
+    (await getEffectiveKycStatus(person.id, person.kycStatus)) !== "verified"
+  ) {
+    throw new Error(
+      "A verified KYC identity is required before creating a business entity"
+    );
   }
   const inserted = await db.insert(businessEntities).values({
     ownerUserId: null,
@@ -618,8 +1270,13 @@ export async function createBusinessEntityForUser(userId: number, input: Busines
     metadata: { creatorPersonId: person.id, ownershipAssigned: false },
   });
 
-  const created = await db.select().from(businessEntities).where(eq(businessEntities.id, businessId)).limit(1);
-  if (!created[0]) throw new Error("Failed to load the created business entity");
+  const created = await db
+    .select()
+    .from(businessEntities)
+    .where(eq(businessEntities.id, businessId))
+    .limit(1);
+  if (!created[0])
+    throw new Error("Failed to load the created business entity");
   return created[0];
 }
 
@@ -632,15 +1289,24 @@ type BusinessEntityUpdate = Partial<{
 export async function updateBusinessEntityForUser(
   userId: number,
   businessId: number,
-  input: BusinessEntityUpdate,
+  input: BusinessEntityUpdate
 ) {
   const db = requireDatabase(await getDb());
-  const authorization = await authorizeBusinessPermission(userId, businessId, "business.profile.update", {
-    requireKyc: true,
-  });
-  if (Object.keys(input).length === 0) throw new Error("No business fields were provided for update");
+  const authorization = await authorizeBusinessPermission(
+    userId,
+    businessId,
+    "business.profile.update",
+    {
+      requireKyc: true,
+    }
+  );
+  if (Object.keys(input).length === 0)
+    throw new Error("No business fields were provided for update");
 
-  await db.update(businessEntities).set(input).where(eq(businessEntities.id, businessId));
+  await db
+    .update(businessEntities)
+    .set(input)
+    .where(eq(businessEntities.id, businessId));
   await appendAuditEvent({
     actorUserId: userId,
     action: "business_entity_updated",
@@ -653,7 +1319,11 @@ export async function updateBusinessEntityForUser(
     reasonCode: "PERMISSION_GRANTED",
   });
 
-  const updated = await db.select().from(businessEntities).where(eq(businessEntities.id, businessId)).limit(1);
+  const updated = await db
+    .select()
+    .from(businessEntities)
+    .where(eq(businessEntities.id, businessId))
+    .limit(1);
   if (!updated[0]) throw new Error("Business entity not found after update");
   return updated[0];
 }
@@ -673,7 +1343,10 @@ type VerificationLifecycleStatus = "unverified" | VerificationRecordStatus;
  * Review transitions remain server-controlled. A new submission is required
  * after rejection; a verified identity may only later become suspended/expired.
  */
-const allowedReviewTransitions: Record<VerificationRecordStatus, readonly ReviewStatus[]> = {
+const allowedReviewTransitions: Record<
+  VerificationRecordStatus,
+  readonly ReviewStatus[]
+> = {
   pending: ["verified", "rejected"],
   verified: ["suspended", "expired"],
   suspended: ["verified", "rejected"],
@@ -681,18 +1354,26 @@ const allowedReviewTransitions: Record<VerificationRecordStatus, readonly Review
   rejected: [],
 };
 
-function assertSubmissionAllowed(status: VerificationLifecycleStatus, verificationType: "KYC" | "KYB") {
-  if (status === "unverified" || status === "rejected" || status === "expired") return;
-  throw new Error(`${verificationType} submission is not allowed while the current lifecycle state is ${status}`);
+function assertSubmissionAllowed(
+  status: VerificationLifecycleStatus,
+  verificationType: "KYC" | "KYB"
+) {
+  if (status === "unverified" || status === "rejected" || status === "expired")
+    return;
+  throw new Error(
+    `${verificationType} submission is not allowed while the current lifecycle state is ${status}`
+  );
 }
 
 function assertReviewTransition(
   currentStatus: VerificationRecordStatus,
   nextStatus: ReviewStatus,
-  verificationType: "KYC" | "KYB",
+  verificationType: "KYC" | "KYB"
 ) {
   if (allowedReviewTransitions[currentStatus].includes(nextStatus)) return;
-  throw new Error(`${verificationType} transition from ${currentStatus} to ${nextStatus} is not allowed`);
+  throw new Error(
+    `${verificationType} transition from ${currentStatus} to ${nextStatus} is not allowed`
+  );
 }
 
 type KycVerificationSummary = {
@@ -704,7 +1385,9 @@ type KycVerificationSummary = {
   reviewReason: string | null;
 };
 
-async function getLatestKycVerificationForPerson(personId: number): Promise<KycVerificationSummary | undefined> {
+async function getLatestKycVerificationForPerson(
+  personId: number
+): Promise<KycVerificationSummary | undefined> {
   const db = requireDatabase(await getDb());
   const rows = await db
     .select({
@@ -723,16 +1406,64 @@ async function getLatestKycVerificationForPerson(personId: number): Promise<KycV
   return rows[0];
 }
 
+async function getEffectiveKycStatus(
+  personId: number,
+  summaryStatus: (typeof persons.$inferSelect)["kycStatus"]
+) {
+  const latest = await getLatestKycVerificationForPerson(personId);
+  if (summaryStatus !== "verified") return summaryStatus;
+  if (!latest || latest.status !== "verified")
+    return latest?.status ?? "unverified";
+  if (latest.expiresAt && latest.expiresAt <= new Date()) return "expired";
+  return "verified";
+}
+
+async function getLatestKybVerificationForBusiness(businessId: number) {
+  const db = requireDatabase(await getDb());
+  const rows = await db
+    .select({
+      status: kybVerifications.status,
+      expiresAt: kybVerifications.expiresAt,
+    })
+    .from(kybVerifications)
+    .where(eq(kybVerifications.businessId, businessId))
+    .orderBy(desc(kybVerifications.submittedAt), desc(kybVerifications.id))
+    .limit(1);
+  return rows[0];
+}
+
+async function getEffectiveKybStatus(
+  businessId: number,
+  summaryStatus: (typeof businessEntities.$inferSelect)["verificationStatus"]
+) {
+  const latest = await getLatestKybVerificationForBusiness(businessId);
+  if (summaryStatus !== "verified") return summaryStatus;
+  if (!latest || latest.status !== "verified")
+    return latest?.status ?? "unverified";
+  if (latest.expiresAt && latest.expiresAt <= new Date()) return "expired";
+  return "verified";
+}
+
 export async function getKycVerificationForUser(userId: number) {
   const person = await getOrCreatePersonForUser(userId);
   const latest = await getLatestKycVerificationForPerson(person.id);
-  return { personId: person.id, lifecycleStatus: person.kycStatus, latest };
+  const lifecycleStatus = await getEffectiveKycStatus(
+    person.id,
+    person.kycStatus
+  );
+  return { personId: person.id, lifecycleStatus, latest };
 }
 
-export async function submitKycVerificationForUser(userId: number, input: KycSubmissionInput) {
+export async function submitKycVerificationForUser(
+  userId: number,
+  input: KycSubmissionInput
+) {
   const db = requireDatabase(await getDb());
   const person = await getOrCreatePersonForUser(userId);
-  assertSubmissionAllowed(person.kycStatus, "KYC");
+  assertSubmissionAllowed(
+    await getEffectiveKycStatus(person.id, person.kycStatus),
+    "KYC"
+  );
 
   await db.insert(kycVerifications).values({
     personId: person.id,
@@ -741,7 +1472,10 @@ export async function submitKycVerificationForUser(userId: number, input: KycSub
     countryCode: input.countryCode || null,
     documentMetadataJson: input.documentMetadataJson || null,
   });
-  await db.update(persons).set({ kycStatus: "pending" }).where(eq(persons.id, person.id));
+  await db
+    .update(persons)
+    .set({ kycStatus: "pending" })
+    .where(eq(persons.id, person.id));
   await appendAuditEvent({
     actorUserId: userId,
     action: "kyc_verification_submitted",
@@ -792,7 +1526,10 @@ export async function getBiometricVerificationForUser(userId: number) {
   };
 }
 
-export async function grantBiometricConsentForUser(userId: number, input: BiometricConsentInput) {
+export async function grantBiometricConsentForUser(
+  userId: number,
+  input: BiometricConsentInput
+) {
   const db = requireDatabase(await getDb());
   const person = await getOrCreatePersonForUser(userId);
   const inserted = await db.insert(biometricConsents).values({
@@ -814,12 +1551,19 @@ export async function grantBiometricConsentForUser(userId: number, input: Biomet
     resourceType: "biometric_consent",
     resourceId: String(inserted[0].insertId),
     dataClassification: "confidential_sovereign",
-    metadata: { personId: person.id, consentType: input.consentType, policyVersion: input.policyVersion },
+    metadata: {
+      personId: person.id,
+      consentType: input.consentType,
+      policyVersion: input.policyVersion,
+    },
   });
   return getBiometricVerificationForUser(userId);
 }
 
-export async function revokeBiometricConsentForUser(userId: number, consentType: BiometricConsentType) {
+export async function revokeBiometricConsentForUser(
+  userId: number,
+  consentType: BiometricConsentType
+) {
   const db = requireDatabase(await getDb());
   const person = await getOrCreatePersonForUser(userId);
   const now = new Date();
@@ -830,8 +1574,8 @@ export async function revokeBiometricConsentForUser(userId: number, consentType:
       and(
         eq(biometricConsents.personId, person.id),
         eq(biometricConsents.consentType, consentType),
-        eq(biometricConsents.status, "granted"),
-      ),
+        eq(biometricConsents.status, "granted")
+      )
     );
   const remainingGranted = await db
     .select({ id: biometricConsents.id })
@@ -839,13 +1583,15 @@ export async function revokeBiometricConsentForUser(userId: number, consentType:
     .where(
       and(
         eq(biometricConsents.personId, person.id),
-        eq(biometricConsents.status, "granted"),
-      ),
+        eq(biometricConsents.status, "granted")
+      )
     )
     .limit(1);
   await db
     .update(persons)
-    .set({ biometricConsentStatus: remainingGranted[0] ? "granted" : "revoked" })
+    .set({
+      biometricConsentStatus: remainingGranted[0] ? "granted" : "revoked",
+    })
     .where(eq(persons.id, person.id));
   await appendAuditEvent({
     actorUserId: userId,
@@ -865,7 +1611,12 @@ export async function revokeAllBiometricConsentsForUser(userId: number) {
   await db
     .update(biometricConsents)
     .set({ status: "revoked", revokedAt: now })
-    .where(and(eq(biometricConsents.personId, person.id), eq(biometricConsents.status, "granted")));
+    .where(
+      and(
+        eq(biometricConsents.personId, person.id),
+        eq(biometricConsents.status, "granted")
+      )
+    );
   await db
     .update(persons)
     .set({ biometricConsentStatus: "revoked" })
@@ -886,11 +1637,14 @@ export async function reviewKycVerification(
   verificationId: number,
   status: ReviewStatus,
   reviewReason?: string,
-  expiresAt?: Date | null,
+  expiresAt?: Date | null
 ) {
   const db = requireDatabase(await getDb());
   const current = await db
-    .select({ personId: kycVerifications.personId, status: kycVerifications.status })
+    .select({
+      personId: kycVerifications.personId,
+      status: kycVerifications.status,
+    })
     .from(kycVerifications)
     .where(eq(kycVerifications.id, verificationId))
     .limit(1);
@@ -908,7 +1662,10 @@ export async function reviewKycVerification(
       expiresAt: expiresAt ?? null,
     })
     .where(eq(kycVerifications.id, verificationId));
-  await db.update(persons).set({ kycStatus: status }).where(eq(persons.id, current[0].personId));
+  await db
+    .update(persons)
+    .set({ kycStatus: status })
+    .where(eq(persons.id, current[0].personId));
   await appendAuditEvent({
     actorUserId: reviewerUserId,
     action: "kyc_verification_reviewed",
@@ -942,16 +1699,29 @@ export async function listKybVerificationsForUser(userId: number) {
       reviewReason: kybVerifications.reviewReason,
     })
     .from(kybVerifications)
-    .innerJoin(businessEntities, eq(kybVerifications.businessId, businessEntities.id))
-    .innerJoin(businessMemberships, and(
-      eq(businessMemberships.businessId, businessEntities.id),
-      eq(businessMemberships.userId, userId),
-      eq(businessMemberships.status, "active"),
-    ))
+    .innerJoin(
+      businessEntities,
+      eq(kybVerifications.businessId, businessEntities.id)
+    )
+    .innerJoin(
+      businessMemberships,
+      and(
+        eq(businessMemberships.businessId, businessEntities.id),
+        eq(businessMemberships.userId, userId),
+        eq(businessMemberships.status, "active")
+      )
+    )
     .orderBy(desc(kybVerifications.submittedAt), desc(kybVerifications.id));
   const visible = [];
   for (const row of rows) {
-    if (await canAuthorizeBusinessPermission(userId, row.businessId, "business.kyb.read")) visible.push(row);
+    if (
+      await canAuthorizeBusinessPermission(
+        userId,
+        row.businessId,
+        "business.kyb.read"
+      )
+    )
+      visible.push(row);
   }
   return visible;
 }
@@ -959,19 +1729,25 @@ export async function listKybVerificationsForUser(userId: number) {
 export async function submitKybVerificationForUser(
   userId: number,
   businessId: number,
-  input: KybSubmissionInput,
+  input: KybSubmissionInput
 ) {
   const db = requireDatabase(await getDb());
-  const authorization = await authorizeBusinessPermission(userId, businessId, "business.kyb.submit", {
-    requireKyc: true,
-  });
+  const authorization = await authorizeBusinessPermission(
+    userId,
+    businessId,
+    "business.kyb.submit",
+    {
+      requireKyc: true,
+    }
+  );
 
   const business = await db
     .select({ verificationStatus: businessEntities.verificationStatus })
     .from(businessEntities)
     .where(eq(businessEntities.id, businessId))
     .limit(1);
-  if (!business[0]) throw new Error("Business entity was not found for KYB submission");
+  if (!business[0])
+    throw new Error("Business entity was not found for KYB submission");
   assertSubmissionAllowed(business[0].verificationStatus, "KYB");
 
   const inserted = await db.insert(kybVerifications).values({
@@ -982,7 +1758,10 @@ export async function submitKybVerificationForUser(
     documentMetadataJson: input.documentMetadataJson || null,
   });
   const verificationId = Number(inserted[0].insertId);
-  await db.update(businessEntities).set({ verificationStatus: "pending" }).where(eq(businessEntities.id, businessId));
+  await db
+    .update(businessEntities)
+    .set({ verificationStatus: "pending" })
+    .where(eq(businessEntities.id, businessId));
   await appendAuditEvent({
     actorUserId: userId,
     action: "kyb_verification_submitted",
@@ -1006,11 +1785,14 @@ export async function reviewKybVerification(
   verificationId: number,
   status: ReviewStatus,
   reviewReason?: string,
-  expiresAt?: Date | null,
+  expiresAt?: Date | null
 ) {
   const db = requireDatabase(await getDb());
   const current = await db
-    .select({ businessId: kybVerifications.businessId, status: kybVerifications.status })
+    .select({
+      businessId: kybVerifications.businessId,
+      status: kybVerifications.status,
+    })
     .from(kybVerifications)
     .where(eq(kybVerifications.id, verificationId))
     .limit(1);
@@ -1045,10 +1827,27 @@ export async function reviewKybVerification(
 }
 
 type TradeOfferingType = "product" | "service" | "used_asset";
-type TradeDataClassification = "public" | "verified" | "restricted" | "confidential_sovereign";
-type TradeOfferingReviewStatus = "verified" | "suspended" | "expired" | "rejected";
-type IndividualActivityType = "consumer" | "individual_producer" | "used_asset_seller" | "service_provider";
-type BusinessActivityType = "factory" | "importer" | "exporter" | "store" | "service_provider";
+type TradeDataClassification =
+  | "public"
+  | "verified"
+  | "restricted"
+  | "confidential_sovereign";
+type TradeOfferingReviewStatus =
+  | "verified"
+  | "suspended"
+  | "expired"
+  | "rejected";
+type IndividualActivityType =
+  | "consumer"
+  | "individual_producer"
+  | "used_asset_seller"
+  | "service_provider";
+type BusinessActivityType =
+  | "factory"
+  | "importer"
+  | "exporter"
+  | "store"
+  | "service_provider";
 type ActivityReviewStatus = "verified" | "suspended" | "expired" | "rejected";
 type ActivityLifecycleStatus = "unverified" | "pending" | ActivityReviewStatus;
 export type TradePartyKind = "business" | "individual";
@@ -1106,7 +1905,7 @@ export type RelationshipEvaluation = {
 async function assertVerifiedTradeEligibility(
   userId: number,
   businessId: number,
-  permissionCode: BusinessPermissionCode,
+  permissionCode: BusinessPermissionCode
 ) {
   return authorizeBusinessPermission(userId, businessId, permissionCode, {
     requireKyc: true,
@@ -1114,12 +1913,21 @@ async function assertVerifiedTradeEligibility(
   });
 }
 
-function assertActivitySubmissionAllowed(status: ActivityLifecycleStatus, scope: "Individual activity" | "Business activity") {
-  if (status === "unverified" || status === "rejected" || status === "expired") return;
-  throw new Error(`${scope} submission is not allowed while the current lifecycle state is ${status}`);
+function assertActivitySubmissionAllowed(
+  status: ActivityLifecycleStatus,
+  scope: "Individual activity" | "Business activity"
+) {
+  if (status === "unverified" || status === "rejected" || status === "expired")
+    return;
+  throw new Error(
+    `${scope} submission is not allowed while the current lifecycle state is ${status}`
+  );
 }
 
-const allowedActivityReviewTransitions: Record<"pending" | ActivityReviewStatus, readonly ActivityReviewStatus[]> = {
+const allowedActivityReviewTransitions: Record<
+  "pending" | ActivityReviewStatus,
+  readonly ActivityReviewStatus[]
+> = {
   pending: ["verified", "rejected"],
   verified: ["suspended", "expired"],
   suspended: ["verified", "rejected"],
@@ -1130,10 +1938,13 @@ const allowedActivityReviewTransitions: Record<"pending" | ActivityReviewStatus,
 function assertActivityReviewTransition(
   currentStatus: "pending" | ActivityReviewStatus,
   nextStatus: ActivityReviewStatus,
-  scope: "Individual activity" | "Business activity",
+  scope: "Individual activity" | "Business activity"
 ) {
-  if (allowedActivityReviewTransitions[currentStatus].includes(nextStatus)) return;
-  throw new Error(`${scope} transition from ${currentStatus} to ${nextStatus} is not allowed`);
+  if (allowedActivityReviewTransitions[currentStatus].includes(nextStatus))
+    return;
+  throw new Error(
+    `${scope} transition from ${currentStatus} to ${nextStatus} is not allowed`
+  );
 }
 
 export async function listIndividualActivityProfilesForUser(userId: number) {
@@ -1143,14 +1954,24 @@ export async function listIndividualActivityProfilesForUser(userId: number) {
     .select()
     .from(individualActivityProfiles)
     .where(eq(individualActivityProfiles.personId, person.id))
-    .orderBy(desc(individualActivityProfiles.updatedAt), desc(individualActivityProfiles.id));
+    .orderBy(
+      desc(individualActivityProfiles.updatedAt),
+      desc(individualActivityProfiles.id)
+    );
 }
 
-export async function submitIndividualActivityProfileForUser(userId: number, input: IndividualActivityProfileInput) {
+export async function submitIndividualActivityProfileForUser(
+  userId: number,
+  input: IndividualActivityProfileInput
+) {
   const db = requireDatabase(await getDb());
   const person = await getOrCreatePersonForUser(userId);
-  if (person.kycStatus !== "verified") {
-    throw new Error("A verified KYC identity is required before submitting an individual activity profile");
+  if (
+    (await getEffectiveKycStatus(person.id, person.kycStatus)) !== "verified"
+  ) {
+    throw new Error(
+      "A verified KYC identity is required before submitting an individual activity profile"
+    );
   }
 
   const existing = await db
@@ -1159,13 +1980,16 @@ export async function submitIndividualActivityProfileForUser(userId: number, inp
     .where(
       and(
         eq(individualActivityProfiles.personId, person.id),
-        eq(individualActivityProfiles.activityType, input.activityType),
-      ),
+        eq(individualActivityProfiles.activityType, input.activityType)
+      )
     )
     .limit(1);
 
   if (existing[0]) {
-    assertActivitySubmissionAllowed(existing[0].verificationStatus, "Individual activity");
+    assertActivitySubmissionAllowed(
+      existing[0].verificationStatus,
+      "Individual activity"
+    );
     await db
       .update(individualActivityProfiles)
       .set({
@@ -1190,18 +2014,22 @@ export async function submitIndividualActivityProfileForUser(userId: number, inp
     .where(
       and(
         eq(individualActivityProfiles.personId, person.id),
-        eq(individualActivityProfiles.activityType, input.activityType),
-      ),
+        eq(individualActivityProfiles.activityType, input.activityType)
+      )
     )
     .limit(1);
-  if (!profile[0]) throw new Error("Failed to load the submitted individual activity profile");
+  if (!profile[0])
+    throw new Error("Failed to load the submitted individual activity profile");
   await appendAuditEvent({
     actorUserId: userId,
     action: "individual_activity_profile_submitted",
     resourceType: "individual_activity_profile",
     resourceId: String(profile[0].id),
     dataClassification: "verified",
-    metadata: { activityType: input.activityType, verificationStatus: "pending" },
+    metadata: {
+      activityType: input.activityType,
+      verificationStatus: "pending",
+    },
   });
   return profile[0];
 }
@@ -1209,27 +2037,42 @@ export async function submitIndividualActivityProfileForUser(userId: number, inp
 export async function reviewIndividualActivityProfile(
   reviewerUserId: number,
   profileId: number,
-  status: ActivityReviewStatus,
+  status: ActivityReviewStatus
 ) {
   const db = requireDatabase(await getDb());
   const current = await db
-    .select({ status: individualActivityProfiles.verificationStatus, activityType: individualActivityProfiles.activityType })
+    .select({
+      status: individualActivityProfiles.verificationStatus,
+      activityType: individualActivityProfiles.activityType,
+    })
     .from(individualActivityProfiles)
     .where(eq(individualActivityProfiles.id, profileId))
     .limit(1);
   if (!current[0]) throw new Error("Individual activity profile was not found");
   if (current[0].status === "unverified") {
-    throw new Error("An unverified individual activity profile must be submitted before review");
+    throw new Error(
+      "An unverified individual activity profile must be submitted before review"
+    );
   }
-  assertActivityReviewTransition(current[0].status, status, "Individual activity");
-  await db.update(individualActivityProfiles).set({ verificationStatus: status }).where(eq(individualActivityProfiles.id, profileId));
+  assertActivityReviewTransition(
+    current[0].status,
+    status,
+    "Individual activity"
+  );
+  await db
+    .update(individualActivityProfiles)
+    .set({ verificationStatus: status })
+    .where(eq(individualActivityProfiles.id, profileId));
   await appendAuditEvent({
     actorUserId: reviewerUserId,
     action: "individual_activity_profile_reviewed",
     resourceType: "individual_activity_profile",
     resourceId: String(profileId),
     dataClassification: "verified",
-    metadata: { activityType: current[0].activityType, verificationStatus: status },
+    metadata: {
+      activityType: current[0].activityType,
+      verificationStatus: status,
+    },
   });
   return { profileId, status };
 }
@@ -1249,16 +2092,35 @@ export async function listBusinessActivityVerificationsForUser(userId: number) {
       updatedAt: businessActivityVerifications.updatedAt,
     })
     .from(businessActivityVerifications)
-    .innerJoin(businessEntities, eq(businessActivityVerifications.businessId, businessEntities.id))
-    .innerJoin(businessMemberships, and(
-      eq(businessMemberships.businessId, businessActivityVerifications.businessId),
-      eq(businessMemberships.userId, userId),
-      eq(businessMemberships.status, "active"),
-    ))
-    .orderBy(desc(businessActivityVerifications.updatedAt), desc(businessActivityVerifications.id));
+    .innerJoin(
+      businessEntities,
+      eq(businessActivityVerifications.businessId, businessEntities.id)
+    )
+    .innerJoin(
+      businessMemberships,
+      and(
+        eq(
+          businessMemberships.businessId,
+          businessActivityVerifications.businessId
+        ),
+        eq(businessMemberships.userId, userId),
+        eq(businessMemberships.status, "active")
+      )
+    )
+    .orderBy(
+      desc(businessActivityVerifications.updatedAt),
+      desc(businessActivityVerifications.id)
+    );
   const visible = [];
   for (const row of rows) {
-    if (await canAuthorizeBusinessPermission(userId, row.businessId, "business.activity.read")) visible.push(row);
+    if (
+      await canAuthorizeBusinessPermission(
+        userId,
+        row.businessId,
+        "business.activity.read"
+      )
+    )
+      visible.push(row);
   }
   return visible;
 }
@@ -1266,26 +2128,38 @@ export async function listBusinessActivityVerificationsForUser(userId: number) {
 export async function submitBusinessActivityVerificationForUser(
   userId: number,
   businessId: number,
-  input: BusinessActivityVerificationInput,
+  input: BusinessActivityVerificationInput
 ) {
   const db = requireDatabase(await getDb());
-  await assertVerifiedTradeEligibility(userId, businessId, "business.activity.submit");
+  await assertVerifiedTradeEligibility(
+    userId,
+    businessId,
+    "business.activity.submit"
+  );
   const existing = await db
     .select()
     .from(businessActivityVerifications)
     .where(
       and(
         eq(businessActivityVerifications.businessId, businessId),
-        eq(businessActivityVerifications.activityType, input.activityType),
-      ),
+        eq(businessActivityVerifications.activityType, input.activityType)
+      )
     )
     .limit(1);
 
   if (existing[0]) {
-    assertActivitySubmissionAllowed(existing[0].verificationStatus, "Business activity");
+    assertActivitySubmissionAllowed(
+      existing[0].verificationStatus,
+      "Business activity"
+    );
     await db
       .update(businessActivityVerifications)
-      .set({ verificationStatus: "pending", evidenceReference: input.evidenceReference || null, reviewedByUserId: null, reviewedAt: null })
+      .set({
+        verificationStatus: "pending",
+        evidenceReference: input.evidenceReference || null,
+        reviewedByUserId: null,
+        reviewedAt: null,
+      })
       .where(eq(businessActivityVerifications.id, existing[0].id));
   } else {
     await db.insert(businessActivityVerifications).values({
@@ -1302,18 +2176,25 @@ export async function submitBusinessActivityVerificationForUser(
     .where(
       and(
         eq(businessActivityVerifications.businessId, businessId),
-        eq(businessActivityVerifications.activityType, input.activityType),
-      ),
+        eq(businessActivityVerifications.activityType, input.activityType)
+      )
     )
     .limit(1);
-  if (!verification[0]) throw new Error("Failed to load the submitted business activity verification");
+  if (!verification[0])
+    throw new Error(
+      "Failed to load the submitted business activity verification"
+    );
   await appendAuditEvent({
     actorUserId: userId,
     action: "business_activity_verification_submitted",
     resourceType: "business_activity_verification",
     resourceId: String(verification[0].id),
     dataClassification: "verified",
-    metadata: { businessId, activityType: input.activityType, verificationStatus: "pending" },
+    metadata: {
+      businessId,
+      activityType: input.activityType,
+      verificationStatus: "pending",
+    },
   });
   return verification[0];
 }
@@ -1322,7 +2203,7 @@ export async function reviewBusinessActivityVerification(
   reviewerUserId: number,
   verificationId: number,
   status: ActivityReviewStatus,
-  expiresAt?: Date | null,
+  expiresAt?: Date | null
 ) {
   const db = requireDatabase(await getDb());
   const current = await db
@@ -1334,14 +2215,26 @@ export async function reviewBusinessActivityVerification(
     .from(businessActivityVerifications)
     .where(eq(businessActivityVerifications.id, verificationId))
     .limit(1);
-  if (!current[0]) throw new Error("Business activity verification was not found");
+  if (!current[0])
+    throw new Error("Business activity verification was not found");
   if (current[0].status === "unverified") {
-    throw new Error("An unverified business activity must be submitted before review");
+    throw new Error(
+      "An unverified business activity must be submitted before review"
+    );
   }
-  assertActivityReviewTransition(current[0].status, status, "Business activity");
+  assertActivityReviewTransition(
+    current[0].status,
+    status,
+    "Business activity"
+  );
   await db
     .update(businessActivityVerifications)
-    .set({ verificationStatus: status, reviewedByUserId: reviewerUserId, reviewedAt: new Date(), expiresAt: expiresAt ?? null })
+    .set({
+      verificationStatus: status,
+      reviewedByUserId: reviewerUserId,
+      reviewedAt: new Date(),
+      expiresAt: expiresAt ?? null,
+    })
     .where(eq(businessActivityVerifications.id, verificationId));
   await appendAuditEvent({
     actorUserId: reviewerUserId,
@@ -1349,34 +2242,52 @@ export async function reviewBusinessActivityVerification(
     resourceType: "business_activity_verification",
     resourceId: String(verificationId),
     dataClassification: "verified",
-    metadata: { businessId: current[0].businessId, activityType: current[0].activityType, verificationStatus: status },
+    metadata: {
+      businessId: current[0].businessId,
+      activityType: current[0].activityType,
+      verificationStatus: status,
+    },
   });
   return { verificationId, businessId: current[0].businessId, status };
 }
 
-async function listCurrentVerifiedBusinessActivities(businessId: number): Promise<BusinessActivityType[]> {
+async function listCurrentVerifiedBusinessActivities(
+  businessId: number
+): Promise<BusinessActivityType[]> {
   const db = requireDatabase(await getDb());
   const now = new Date();
   const rows = await db
-    .select({ activityType: businessActivityVerifications.activityType, expiresAt: businessActivityVerifications.expiresAt })
+    .select({
+      activityType: businessActivityVerifications.activityType,
+      expiresAt: businessActivityVerifications.expiresAt,
+    })
     .from(businessActivityVerifications)
     .where(
       and(
         eq(businessActivityVerifications.businessId, businessId),
-        eq(businessActivityVerifications.verificationStatus, "verified"),
-      ),
+        eq(businessActivityVerifications.verificationStatus, "verified")
+      )
     );
-  return rows.filter(row => !row.expiresAt || row.expiresAt > now).map(row => row.activityType);
+  return rows
+    .filter(row => !row.expiresAt || row.expiresAt > now)
+    .map(row => row.activityType);
 }
 
-function businessActivitySupportsOffering(activityType: BusinessActivityType, offeringType: TradeOfferingType) {
+function businessActivitySupportsOffering(
+  activityType: BusinessActivityType,
+  offeringType: TradeOfferingType
+) {
   if (activityType === "service_provider") return offeringType === "service";
   return offeringType === "product" || offeringType === "used_asset";
 }
 
-function individualActivitySupportsOffering(activityType: IndividualActivityType, offeringType: TradeOfferingType) {
+function individualActivitySupportsOffering(
+  activityType: IndividualActivityType,
+  offeringType: TradeOfferingType
+) {
   if (activityType === "individual_producer") return offeringType === "product";
-  if (activityType === "used_asset_seller") return offeringType === "used_asset";
+  if (activityType === "used_asset_seller")
+    return offeringType === "used_asset";
   if (activityType === "service_provider") return offeringType === "service";
   return false;
 }
@@ -1385,15 +2296,24 @@ async function assertVerifiedBusinessOperationalActivityForUser(
   userId: number,
   businessId: number,
   permissionCode: BusinessPermissionCode,
-  offeringType?: TradeOfferingType,
+  offeringType?: TradeOfferingType
 ) {
   await assertVerifiedTradeEligibility(userId, businessId, permissionCode);
   const activities = await listCurrentVerifiedBusinessActivities(businessId);
   if (activities.length === 0) {
-    throw new Error("A verified operational business activity is required before commercial access");
+    throw new Error(
+      "A verified operational business activity is required before commercial access"
+    );
   }
-  if (offeringType && !activities.some(activity => businessActivitySupportsOffering(activity, offeringType))) {
-    throw new Error("The verified business activity does not permit this offering type");
+  if (
+    offeringType &&
+    !activities.some(activity =>
+      businessActivitySupportsOffering(activity, offeringType)
+    )
+  ) {
+    throw new Error(
+      "The verified business activity does not permit this offering type"
+    );
   }
   return activities;
 }
@@ -1401,51 +2321,92 @@ async function assertVerifiedBusinessOperationalActivityForUser(
 async function assertVerifiedIndividualActivityProfileForUser(
   userId: number,
   profileId: number,
-  offeringType?: TradeOfferingType,
+  offeringType?: TradeOfferingType
 ) {
   const db = requireDatabase(await getDb());
   const person = await getOrCreatePersonForUser(userId);
-  if (person.kycStatus !== "verified") {
-    throw new Error("A verified KYC identity is required before commercial access");
+  if (
+    (await getEffectiveKycStatus(person.id, person.kycStatus)) !== "verified"
+  ) {
+    throw new Error(
+      "A verified KYC identity is required before commercial access"
+    );
   }
   const profile = await db
     .select()
     .from(individualActivityProfiles)
-    .where(and(eq(individualActivityProfiles.id, profileId), eq(individualActivityProfiles.personId, person.id)))
+    .where(
+      and(
+        eq(individualActivityProfiles.id, profileId),
+        eq(individualActivityProfiles.personId, person.id)
+      )
+    )
     .limit(1);
-  if (!profile[0]) throw new Error("The individual activity profile is not owned by the current verified identity");
+  if (!profile[0])
+    throw new Error(
+      "The individual activity profile is not owned by the current verified identity"
+    );
   if (profile[0].verificationStatus !== "verified") {
-    throw new Error("A verified individual activity profile is required before commercial access");
+    throw new Error(
+      "A verified individual activity profile is required before commercial access"
+    );
   }
-  if (offeringType && !individualActivitySupportsOffering(profile[0].activityType, offeringType)) {
-    throw new Error("The verified individual activity profile does not permit this offering type");
+  if (
+    offeringType &&
+    !individualActivitySupportsOffering(profile[0].activityType, offeringType)
+  ) {
+    throw new Error(
+      "The verified individual activity profile does not permit this offering type"
+    );
   }
   return profile[0];
 }
 
-async function resolveTradeParty(input: { kind: TradePartyKind; businessId?: number; individualProfileId?: number }) {
+async function resolveTradeParty(input: {
+  kind: TradePartyKind;
+  businessId?: number;
+  individualProfileId?: number;
+}) {
   const db = requireDatabase(await getDb());
   if (input.kind === "business") {
-    if (!input.businessId || input.individualProfileId) throw new Error("A business party requires exactly one business identity");
-    const business = await db.select().from(businessEntities).where(eq(businessEntities.id, input.businessId)).limit(1);
+    if (!input.businessId || input.individualProfileId)
+      throw new Error(
+        "A business party requires exactly one business identity"
+      );
+    const business = await db
+      .select()
+      .from(businessEntities)
+      .where(eq(businessEntities.id, input.businessId))
+      .limit(1);
     if (!business[0]) throw new Error("Business party was not found");
-    const businessActivities = await listCurrentVerifiedBusinessActivities(input.businessId);
+    const businessActivities = await listCurrentVerifiedBusinessActivities(
+      input.businessId
+    );
+    const effectiveKybStatus = await getEffectiveKybStatus(
+      input.businessId,
+      business[0].verificationStatus
+    );
     return {
       kind: "business" as const,
       identityKey: `business:${input.businessId}`,
       activityType: null,
       businessActivities,
       entityType: business[0].entityType,
-      legalVerificationStatus: business[0].verificationStatus,
+      legalVerificationStatus: effectiveKybStatus,
       kycStatus: null,
-      activityVerificationStatus: businessActivities.length > 0 ? "verified" : "unverified",
+      activityVerificationStatus:
+        businessActivities.length > 0 ? "verified" : "unverified",
     } satisfies ResolvedTradeParty;
   }
 
-  if (!input.individualProfileId || input.businessId) throw new Error("An individual party requires exactly one activity profile");
+  if (!input.individualProfileId || input.businessId)
+    throw new Error(
+      "An individual party requires exactly one activity profile"
+    );
   const profile = await db
     .select({
       id: individualActivityProfiles.id,
+      personId: individualActivityProfiles.personId,
       activityType: individualActivityProfiles.activityType,
       verificationStatus: individualActivityProfiles.verificationStatus,
       kycStatus: persons.kycStatus,
@@ -1455,6 +2416,10 @@ async function resolveTradeParty(input: { kind: TradePartyKind; businessId?: num
     .where(eq(individualActivityProfiles.id, input.individualProfileId))
     .limit(1);
   if (!profile[0]) throw new Error("Individual activity profile was not found");
+  const effectiveKycStatus = await getEffectiveKycStatus(
+    profile[0].personId,
+    profile[0].kycStatus
+  );
   return {
     kind: "individual" as const,
     identityKey: `individual:${profile[0].id}`,
@@ -1462,12 +2427,15 @@ async function resolveTradeParty(input: { kind: TradePartyKind; businessId?: num
     businessActivities: [],
     entityType: null,
     legalVerificationStatus: null,
-    kycStatus: profile[0].kycStatus,
+    kycStatus: effectiveKycStatus,
     activityVerificationStatus: profile[0].verificationStatus,
   } satisfies ResolvedTradeParty;
 }
 
-export function calculateRelationshipEvaluation(supplier: ResolvedTradeParty, requester: ResolvedTradeParty): RelationshipEvaluation {
+export function calculateRelationshipEvaluation(
+  supplier: ResolvedTradeParty,
+  requester: ResolvedTradeParty
+): RelationshipEvaluation {
   const relationshipMode: RelationshipMode =
     supplier.kind === "business" && requester.kind === "business"
       ? "b2b"
@@ -1478,36 +2446,118 @@ export function calculateRelationshipEvaluation(supplier: ResolvedTradeParty, re
           : "c2c";
 
   if (supplier.identityKey === requester.identityKey) {
-    return { decision: "deny", relationshipMode, decisionReason: "self_relationship_not_allowed", score: 0 };
+    return {
+      decision: "deny",
+      relationshipMode,
+      decisionReason: "self_relationship_not_allowed",
+      score: 0,
+    };
   }
-  if (supplier.kind === "individual" && supplier.activityType === "consumer" && requester.entityType === "factory") {
-    return { decision: "deny", relationshipMode, decisionReason: "consumer_to_factory_not_supported", score: 0 };
+  if (
+    supplier.kind === "business" &&
+    supplier.entityType === "factory" &&
+    requester.kind === "individual" &&
+    requester.activityType === "consumer"
+  ) {
+    return {
+      decision: "deny",
+      relationshipMode,
+      decisionReason: "consumer_to_factory_not_supported",
+      score: 0,
+    };
   }
-  if (supplier.kind === "individual" && supplier.activityType === "consumer" && requester.entityType === "importer") {
-    return { decision: "deny", relationshipMode, decisionReason: "consumer_to_importer_not_supported", score: 0 };
+  if (
+    supplier.kind === "business" &&
+    supplier.entityType === "importer" &&
+    requester.kind === "individual" &&
+    requester.activityType === "consumer"
+  ) {
+    return {
+      decision: "deny",
+      relationshipMode,
+      decisionReason: "consumer_to_importer_not_supported",
+      score: 0,
+    };
   }
-  if (supplier.kind === "business" && supplier.legalVerificationStatus !== "verified") {
-    return { decision: "deny", relationshipMode, decisionReason: "supplier_business_not_kyb_verified", score: 0 };
+  if (
+    supplier.kind === "business" &&
+    supplier.legalVerificationStatus !== "verified"
+  ) {
+    return {
+      decision: "deny",
+      relationshipMode,
+      decisionReason: "supplier_business_not_kyb_verified",
+      score: 0,
+    };
   }
-  if (requester.kind === "business" && requester.legalVerificationStatus !== "verified") {
-    return { decision: "deny", relationshipMode, decisionReason: "requester_business_not_kyb_verified", score: 0 };
+  if (
+    requester.kind === "business" &&
+    requester.legalVerificationStatus !== "verified"
+  ) {
+    return {
+      decision: "deny",
+      relationshipMode,
+      decisionReason: "requester_business_not_kyb_verified",
+      score: 0,
+    };
   }
   if (supplier.kind === "individual" && supplier.kycStatus !== "verified") {
-    return { decision: "deny", relationshipMode, decisionReason: "supplier_identity_not_kyc_verified", score: 0 };
+    return {
+      decision: "deny",
+      relationshipMode,
+      decisionReason: "supplier_identity_not_kyc_verified",
+      score: 0,
+    };
   }
   if (requester.kind === "individual" && requester.kycStatus !== "verified") {
-    return { decision: "deny", relationshipMode, decisionReason: "requester_identity_not_kyc_verified", score: 0 };
+    return {
+      decision: "deny",
+      relationshipMode,
+      decisionReason: "requester_identity_not_kyc_verified",
+      score: 0,
+    };
   }
-  if (supplier.entityType === "government_entity" || requester.entityType === "government_entity") {
-    return { decision: "manual_review", relationshipMode, decisionReason: "government_relationship_out_of_operational_scope", score: 50 };
+  if (
+    supplier.entityType === "government_entity" ||
+    requester.entityType === "government_entity"
+  ) {
+    return {
+      decision: "manual_review",
+      relationshipMode,
+      decisionReason: "government_relationship_out_of_operational_scope",
+      score: 50,
+    };
+  }
+  if (relationshipMode !== "b2b") {
+    return {
+      decision: "deny",
+      relationshipMode,
+      decisionReason: "individual_commerce_policy_unapproved",
+      score: 0,
+    };
   }
   if (supplier.activityVerificationStatus !== "verified") {
-    return { decision: "manual_review", relationshipMode, decisionReason: "supplier_operational_activity_pending_or_unverified", score: 50 };
+    return {
+      decision: "manual_review",
+      relationshipMode,
+      decisionReason: "supplier_operational_activity_pending_or_unverified",
+      score: 50,
+    };
   }
   if (requester.activityVerificationStatus !== "verified") {
-    return { decision: "manual_review", relationshipMode, decisionReason: "requester_operational_activity_pending_or_unverified", score: 50 };
+    return {
+      decision: "manual_review",
+      relationshipMode,
+      decisionReason: "requester_operational_activity_pending_or_unverified",
+      score: 50,
+    };
   }
-  return { decision: "allow", relationshipMode, decisionReason: "relationship_trust_gates_satisfied", score: 100 };
+  return {
+    decision: "allow",
+    relationshipMode,
+    decisionReason: "relationship_trust_gates_satisfied",
+    score: 100,
+  };
 }
 
 type CommercialRelationshipInput = {
@@ -1522,32 +2572,51 @@ type CommercialRelationshipInput = {
 async function evaluateCommercialRelationshipForUser(
   userId: number,
   input: CommercialRelationshipInput,
-  requiredPermission: BusinessPermissionCode,
+  requiredPermission: BusinessPermissionCode
 ) {
-  let authorization: { membershipId: number; membershipRole: string } | undefined;
+  let authorization:
+    | { membershipId: number; membershipRole: string }
+    | undefined;
   if (input.requesterKind === "business") {
     if (!input.requesterBusinessId || input.requesterIndividualProfileId) {
-      throw new TRPCError({ code: "FORBIDDEN", message: "A valid requester business context is required" });
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "A valid requester business context is required",
+      });
     }
-    authorization = await authorizeBusinessPermission(userId, input.requesterBusinessId, requiredPermission, {
-      requireVerifiedBusiness: true,
-    });
+    authorization = await authorizeBusinessPermission(
+      userId,
+      input.requesterBusinessId,
+      requiredPermission,
+      {
+        requireVerifiedBusiness: true,
+      }
+    );
   } else {
     if (!input.requesterIndividualProfileId || input.requesterBusinessId) {
-      throw new TRPCError({ code: "FORBIDDEN", message: "A valid requester activity profile is required" });
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "A valid requester activity profile is required",
+      });
     }
     const db = requireDatabase(await getDb());
     const person = await getOrCreatePersonForUser(userId);
     const ownedProfile = await db
       .select({ id: individualActivityProfiles.id })
       .from(individualActivityProfiles)
-      .where(and(
-        eq(individualActivityProfiles.id, input.requesterIndividualProfileId),
-        eq(individualActivityProfiles.personId, person.id),
-      ))
+      .where(
+        and(
+          eq(individualActivityProfiles.id, input.requesterIndividualProfileId),
+          eq(individualActivityProfiles.personId, person.id)
+        )
+      )
       .limit(1);
     if (!ownedProfile[0]) {
-      throw new TRPCError({ code: "FORBIDDEN", message: "The requester activity profile is not owned by the current identity" });
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message:
+          "The requester activity profile is not owned by the current identity",
+      });
     }
   }
   const supplier = await resolveTradeParty({
@@ -1581,8 +2650,15 @@ async function evaluateCommercialRelationshipForUser(
   });
   return evaluation;
 }
-export async function checkCommercialRelationshipForUser(userId: number, input: CommercialRelationshipInput) {
-  return evaluateCommercialRelationshipForUser(userId, input, "trade.match.evaluate");
+export async function checkCommercialRelationshipForUser(
+  userId: number,
+  input: CommercialRelationshipInput
+) {
+  return evaluateCommercialRelationshipForUser(
+    userId,
+    input,
+    "trade.match.evaluate"
+  );
 }
 
 const allowedOfferingReviewTransitions: Record<
@@ -1617,38 +2693,80 @@ export async function listTradeOfferingsForUser(userId: number) {
       updatedAt: tradeOfferings.updatedAt,
     })
     .from(tradeOfferings)
-    .leftJoin(businessEntities, eq(tradeOfferings.businessId, businessEntities.id))
-    .leftJoin(businessMemberships, and(
-      eq(businessMemberships.businessId, tradeOfferings.businessId),
-      eq(businessMemberships.userId, userId),
-      eq(businessMemberships.status, "active"),
-    ))
-    .leftJoin(individualActivityProfiles, eq(tradeOfferings.individualProfileId, individualActivityProfiles.id))
-    .where(or(
-      and(eq(tradeOfferings.supplierKind, "business"), eq(businessMemberships.userId, userId)),
-      and(eq(tradeOfferings.supplierKind, "individual"), eq(individualActivityProfiles.personId, person.id)),
-    ))
+    .leftJoin(
+      businessEntities,
+      eq(tradeOfferings.businessId, businessEntities.id)
+    )
+    .leftJoin(
+      businessMemberships,
+      and(
+        eq(businessMemberships.businessId, tradeOfferings.businessId),
+        eq(businessMemberships.userId, userId),
+        eq(businessMemberships.status, "active")
+      )
+    )
+    .leftJoin(
+      individualActivityProfiles,
+      eq(tradeOfferings.individualProfileId, individualActivityProfiles.id)
+    )
+    .where(
+      or(
+        and(
+          eq(tradeOfferings.supplierKind, "business"),
+          eq(businessMemberships.userId, userId)
+        ),
+        and(
+          eq(tradeOfferings.supplierKind, "individual"),
+          eq(individualActivityProfiles.personId, person.id)
+        )
+      )
+    )
     .orderBy(desc(tradeOfferings.createdAt), desc(tradeOfferings.id));
   const visible = [];
   for (const row of rows) {
-    if (row.supplierKind === "individual" || (row.businessId && await canAuthorizeBusinessPermission(userId, row.businessId, "trade.offering.read", { requireVerifiedBusiness: true }))) {
+    if (
+      row.supplierKind === "individual" ||
+      (row.businessId &&
+        (await canAuthorizeBusinessPermission(
+          userId,
+          row.businessId,
+          "trade.offering.read",
+          { requireVerifiedBusiness: true }
+        )))
+    ) {
       visible.push(row);
     }
   }
   return visible;
 }
 
-export async function createTradeOfferingForUser(userId: number, input: TradeOfferingInput) {
+export async function createTradeOfferingForUser(
+  userId: number,
+  input: TradeOfferingInput
+) {
   const db = requireDatabase(await getDb());
-  const isBusinessSource = typeof input.businessId === "number" && !input.individualProfileId;
-  const isIndividualSource = typeof input.individualProfileId === "number" && !input.businessId;
+  const isBusinessSource =
+    typeof input.businessId === "number" && !input.individualProfileId;
+  const isIndividualSource =
+    typeof input.individualProfileId === "number" && !input.businessId;
   if (!isBusinessSource && !isIndividualSource) {
-    throw new Error("A trade offering requires exactly one verified business or individual activity source");
+    throw new Error(
+      "A trade offering requires exactly one verified business or individual activity source"
+    );
   }
   if (isBusinessSource) {
-    await assertVerifiedBusinessOperationalActivityForUser(userId, input.businessId!, "trade.offering.create", input.offeringType);
+    await assertVerifiedBusinessOperationalActivityForUser(
+      userId,
+      input.businessId!,
+      "trade.offering.create",
+      input.offeringType
+    );
   } else {
-    await assertVerifiedIndividualActivityProfileForUser(userId, input.individualProfileId!, input.offeringType);
+    await assertVerifiedIndividualActivityProfileForUser(
+      userId,
+      input.individualProfileId!,
+      input.offeringType
+    );
   }
   const inserted = await db.insert(tradeOfferings).values({
     businessId: input.businessId ?? null,
@@ -1676,7 +2794,11 @@ export async function createTradeOfferingForUser(userId: number, input: TradeOff
       verificationStatus: "pending",
     },
   });
-  const created = await db.select().from(tradeOfferings).where(eq(tradeOfferings.id, offeringId)).limit(1);
+  const created = await db
+    .select()
+    .from(tradeOfferings)
+    .where(eq(tradeOfferings.id, offeringId))
+    .limit(1);
   if (!created[0]) throw new Error("Failed to load the created trade offering");
   return created[0];
 }
@@ -1684,7 +2806,7 @@ export async function createTradeOfferingForUser(userId: number, input: TradeOff
 export async function reviewTradeOffering(
   reviewerUserId: number,
   offeringId: number,
-  status: TradeOfferingReviewStatus,
+  status: TradeOfferingReviewStatus
 ) {
   const db = requireDatabase(await getDb());
   const current = await db
@@ -1702,12 +2824,17 @@ export async function reviewTradeOffering(
     throw new Error("A draft trade offering must be submitted before review");
   }
   if (!allowedOfferingReviewTransitions[current[0].status].includes(status)) {
-    throw new Error(`Trade offering transition from ${current[0].status} to ${status} is not allowed`);
+    throw new Error(
+      `Trade offering transition from ${current[0].status} to ${status} is not allowed`
+    );
   }
 
   await db
     .update(tradeOfferings)
-    .set({ verificationStatus: status, lifecycleStatus: status === "verified" ? "published" : "draft" })
+    .set({
+      verificationStatus: status,
+      lifecycleStatus: status === "verified" ? "published" : "draft",
+    })
     .where(eq(tradeOfferings.id, offeringId));
   await appendAuditEvent({
     actorUserId: reviewerUserId,
@@ -1721,7 +2848,12 @@ export async function reviewTradeOffering(
       verificationStatus: status,
     },
   });
-  return { offeringId, businessId: current[0].businessId, individualProfileId: current[0].individualProfileId, status };
+  return {
+    offeringId,
+    businessId: current[0].businessId,
+    individualProfileId: current[0].individualProfileId,
+    status,
+  };
 }
 
 export async function listTradeDemandsForUser(userId: number) {
@@ -1742,38 +2874,81 @@ export async function listTradeDemandsForUser(userId: number) {
       updatedAt: tradeDemands.updatedAt,
     })
     .from(tradeDemands)
-    .leftJoin(businessEntities, eq(tradeDemands.requesterBusinessId, businessEntities.id))
-    .leftJoin(businessMemberships, and(
-      eq(businessMemberships.businessId, tradeDemands.requesterBusinessId),
-      eq(businessMemberships.userId, userId),
-      eq(businessMemberships.status, "active"),
-    ))
-    .leftJoin(individualActivityProfiles, eq(tradeDemands.requesterIndividualProfileId, individualActivityProfiles.id))
-    .where(or(
-      and(eq(tradeDemands.requesterKind, "business"), eq(businessMemberships.userId, userId)),
-      and(eq(tradeDemands.requesterKind, "individual"), eq(individualActivityProfiles.personId, person.id)),
-    ))
+    .leftJoin(
+      businessEntities,
+      eq(tradeDemands.requesterBusinessId, businessEntities.id)
+    )
+    .leftJoin(
+      businessMemberships,
+      and(
+        eq(businessMemberships.businessId, tradeDemands.requesterBusinessId),
+        eq(businessMemberships.userId, userId),
+        eq(businessMemberships.status, "active")
+      )
+    )
+    .leftJoin(
+      individualActivityProfiles,
+      eq(
+        tradeDemands.requesterIndividualProfileId,
+        individualActivityProfiles.id
+      )
+    )
+    .where(
+      or(
+        and(
+          eq(tradeDemands.requesterKind, "business"),
+          eq(businessMemberships.userId, userId)
+        ),
+        and(
+          eq(tradeDemands.requesterKind, "individual"),
+          eq(individualActivityProfiles.personId, person.id)
+        )
+      )
+    )
     .orderBy(desc(tradeDemands.createdAt), desc(tradeDemands.id));
   const visible = [];
   for (const row of rows) {
-    if (row.requesterKind === "individual" || (row.requesterBusinessId && await canAuthorizeBusinessPermission(userId, row.requesterBusinessId, "trade.demand.read", { requireVerifiedBusiness: true }))) {
+    if (
+      row.requesterKind === "individual" ||
+      (row.requesterBusinessId &&
+        (await canAuthorizeBusinessPermission(
+          userId,
+          row.requesterBusinessId,
+          "trade.demand.read",
+          { requireVerifiedBusiness: true }
+        )))
+    ) {
       visible.push(row);
     }
   }
   return visible;
 }
 
-export async function createTradeDemandForUser(userId: number, input: TradeDemandInput) {
+export async function createTradeDemandForUser(
+  userId: number,
+  input: TradeDemandInput
+) {
   const db = requireDatabase(await getDb());
-  const isBusinessRequester = typeof input.businessId === "number" && !input.individualProfileId;
-  const isIndividualRequester = typeof input.individualProfileId === "number" && !input.businessId;
+  const isBusinessRequester =
+    typeof input.businessId === "number" && !input.individualProfileId;
+  const isIndividualRequester =
+    typeof input.individualProfileId === "number" && !input.businessId;
   if (!isBusinessRequester && !isIndividualRequester) {
-    throw new Error("A trade demand requires exactly one verified business or individual activity source");
+    throw new Error(
+      "A trade demand requires exactly one verified business or individual activity source"
+    );
   }
   if (isBusinessRequester) {
-    await assertVerifiedBusinessOperationalActivityForUser(userId, input.businessId!, "trade.demand.create");
+    await assertVerifiedBusinessOperationalActivityForUser(
+      userId,
+      input.businessId!,
+      "trade.demand.create"
+    );
   } else {
-    await assertVerifiedIndividualActivityProfileForUser(userId, input.individualProfileId!);
+    await assertVerifiedIndividualActivityProfileForUser(
+      userId,
+      input.individualProfileId!
+    );
   }
   const inserted = await db.insert(tradeDemands).values({
     requesterBusinessId: input.businessId ?? null,
@@ -1799,21 +2974,42 @@ export async function createTradeDemandForUser(userId: number, input: TradeDeman
       demandType: input.demandType,
     },
   });
-  const created = await db.select().from(tradeDemands).where(eq(tradeDemands.id, demandId)).limit(1);
+  const created = await db
+    .select()
+    .from(tradeDemands)
+    .where(eq(tradeDemands.id, demandId))
+    .limit(1);
   if (!created[0]) throw new Error("Failed to load the created trade demand");
   return created[0];
 }
 
-export async function evaluateTradeMatchForUser(userId: number, demandId: number, offeringId: number) {
+export async function evaluateTradeMatchForUser(
+  userId: number,
+  demandId: number,
+  offeringId: number
+) {
   const db = requireDatabase(await getDb());
-  const demand = await db.select().from(tradeDemands).where(eq(tradeDemands.id, demandId)).limit(1);
+  const demand = await db
+    .select()
+    .from(tradeDemands)
+    .where(eq(tradeDemands.id, demandId))
+    .limit(1);
   if (!demand[0]) throw new Error("Trade demand was not found");
   if (demand[0].requesterKind === "business") {
-    if (!demand[0].requesterBusinessId) throw new Error("Business demand is missing its requester identity");
-    await assertVerifiedBusinessOperationalActivityForUser(userId, demand[0].requesterBusinessId, "trade.match.evaluate");
+    if (!demand[0].requesterBusinessId)
+      throw new Error("Business demand is missing its requester identity");
+    await assertVerifiedBusinessOperationalActivityForUser(
+      userId,
+      demand[0].requesterBusinessId,
+      "trade.match.evaluate"
+    );
   } else {
-    if (!demand[0].requesterIndividualProfileId) throw new Error("Individual demand is missing its activity profile");
-    await assertVerifiedIndividualActivityProfileForUser(userId, demand[0].requesterIndividualProfileId);
+    if (!demand[0].requesterIndividualProfileId)
+      throw new Error("Individual demand is missing its activity profile");
+    await assertVerifiedIndividualActivityProfileForUser(
+      userId,
+      demand[0].requesterIndividualProfileId
+    );
   }
 
   const offering = await db
@@ -1830,20 +3026,36 @@ export async function evaluateTradeMatchForUser(userId: number, demandId: number
     .where(eq(tradeOfferings.id, offeringId))
     .limit(1);
   if (!offering[0]) throw new Error("Trade offering was not found");
-  if (demand[0].requesterKind !== "business" || offering[0].supplierKind !== "business") {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Individual commerce remains disabled pending approved C2C policy" });
+  if (
+    demand[0].requesterKind !== "business" ||
+    offering[0].supplierKind !== "business"
+  ) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message:
+        "Individual commerce remains disabled pending approved C2C policy",
+    });
   }
 
   const existing = await db
     .select()
     .from(tradeMatches)
-    .where(and(eq(tradeMatches.demandId, demandId), eq(tradeMatches.offeringId, offeringId)))
+    .where(
+      and(
+        eq(tradeMatches.demandId, demandId),
+        eq(tradeMatches.offeringId, offeringId)
+      )
+    )
     .limit(1);
   if (existing[0]) return existing[0];
 
   const reasons: string[] = [];
-  if (demand[0].demandType !== offering[0].offeringType) reasons.push("offering_type_mismatch");
-  if (offering[0].verificationStatus !== "verified" || offering[0].lifecycleStatus !== "published") {
+  if (demand[0].demandType !== offering[0].offeringType)
+    reasons.push("offering_type_mismatch");
+  if (
+    offering[0].verificationStatus !== "verified" ||
+    offering[0].lifecycleStatus !== "published"
+  ) {
     reasons.push("offering_not_independently_verified_and_published");
   }
 
@@ -1858,9 +3070,15 @@ export async function evaluateTradeMatchForUser(userId: number, demandId: number
     individualProfileId: demand[0].requesterIndividualProfileId ?? undefined,
   });
   const relationship = calculateRelationshipEvaluation(supplier, requester);
-  if (relationship.decision !== "allow") reasons.push(relationship.decisionReason);
+  if (relationship.decision !== "allow")
+    reasons.push(relationship.decisionReason);
 
-  const status = reasons.length > 0 ? (relationship.decision === "manual_review" ? "manual_review" : "ineligible") : "eligible";
+  const status =
+    reasons.length > 0
+      ? relationship.decision === "manual_review"
+        ? "manual_review"
+        : "ineligible"
+      : "eligible";
   const score = status === "eligible" ? 100 : relationship.score;
   const inserted = await db.insert(tradeMatches).values({
     demandId,
@@ -1869,11 +3087,15 @@ export async function evaluateTradeMatchForUser(userId: number, demandId: number
     score,
     relationshipMode: relationship.relationshipMode,
     status,
-    decisionReason: reasons.length === 0 ? relationship.decisionReason : reasons.join(";"),
+    decisionReason:
+      reasons.length === 0 ? relationship.decisionReason : reasons.join(";"),
   });
   const matchId = Number(inserted[0].insertId);
   if (status === "eligible") {
-    await db.update(tradeDemands).set({ status: "matching" }).where(eq(tradeDemands.id, demandId));
+    await db
+      .update(tradeDemands)
+      .set({ status: "matching" })
+      .where(eq(tradeDemands.id, demandId));
   }
   await appendAuditEvent({
     actorUserId: userId,
@@ -1883,16 +3105,29 @@ export async function evaluateTradeMatchForUser(userId: number, demandId: number
     dataClassification: "verified",
     metadata: { demandId, offeringId, status, score },
   });
-  const created = await db.select().from(tradeMatches).where(eq(tradeMatches.id, matchId)).limit(1);
+  const created = await db
+    .select()
+    .from(tradeMatches)
+    .where(eq(tradeMatches.id, matchId))
+    .limit(1);
   if (!created[0]) throw new Error("Failed to load the evaluated trade match");
   return created[0];
 }
 
 export async function listTradeMatchesForUser(userId: number) {
   const db = requireDatabase(await getDb());
-  const memberships = await db.select({ businessId: businessMemberships.businessId }).from(businessMemberships)
-    .where(and(eq(businessMemberships.userId, userId), eq(businessMemberships.status, "active")));
-  const businessIds = Array.from(new Set(memberships.map(row => row.businessId)));
+  const memberships = await db
+    .select({ businessId: businessMemberships.businessId })
+    .from(businessMemberships)
+    .where(
+      and(
+        eq(businessMemberships.userId, userId),
+        eq(businessMemberships.status, "active")
+      )
+    );
+  const businessIds = Array.from(
+    new Set(memberships.map(row => row.businessId))
+  );
   if (businessIds.length === 0) return [];
   const rows = await db
     .select({
@@ -1911,11 +3146,24 @@ export async function listTradeMatchesForUser(userId: number) {
     .from(tradeMatches)
     .innerJoin(tradeDemands, eq(tradeMatches.demandId, tradeDemands.id))
     .innerJoin(tradeOfferings, eq(tradeMatches.offeringId, tradeOfferings.id))
-    .where(and(eq(tradeDemands.requesterKind, "business"), inArray(tradeDemands.requesterBusinessId, businessIds)))
+    .where(
+      and(
+        eq(tradeDemands.requesterKind, "business"),
+        inArray(tradeDemands.requesterBusinessId, businessIds)
+      )
+    )
     .orderBy(desc(tradeMatches.createdAt), desc(tradeMatches.id));
   const visible = [];
   for (const row of rows) {
-    if (row.demandBusinessId && await canAuthorizeBusinessPermission(userId, row.demandBusinessId, "trade.match.read", { requireVerifiedBusiness: true })) {
+    if (
+      row.demandBusinessId &&
+      (await canAuthorizeBusinessPermission(
+        userId,
+        row.demandBusinessId,
+        "trade.match.read",
+        { requireVerifiedBusiness: true }
+      ))
+    ) {
       const { demandBusinessId: _demandBusinessId, ...match } = row;
       visible.push(match);
     }
@@ -1936,35 +3184,79 @@ type TradeLifecycleStatus =
   | "cancelled"
   | "disputed";
 
-function assertExactlyOneCommercialParty(input: CommercialPartyRef, label: string) {
-  const count = Number(typeof input.businessId === "number") + Number(typeof input.individualProfileId === "number");
-  if (count !== 1) throw new Error(`${label} requires exactly one business or individual activity identity`);
+function assertExactlyOneCommercialParty(
+  input: CommercialPartyRef,
+  label: string
+) {
+  const count =
+    Number(typeof input.businessId === "number") +
+    Number(typeof input.individualProfileId === "number");
+  if (count !== 1)
+    throw new Error(
+      `${label} requires exactly one business or individual activity identity`
+    );
 }
 
-async function assertTradeDemandController(userId: number, demandId: number, permissionCode: BusinessPermissionCode) {
+async function assertTradeDemandController(
+  userId: number,
+  demandId: number,
+  permissionCode: BusinessPermissionCode
+) {
   const db = requireDatabase(await getDb());
-  const demand = await db.select().from(tradeDemands).where(eq(tradeDemands.id, demandId)).limit(1);
+  const demand = await db
+    .select()
+    .from(tradeDemands)
+    .where(eq(tradeDemands.id, demandId))
+    .limit(1);
   if (!demand[0]) throw new Error("Trade demand was not found");
   if (demand[0].requesterKind === "business") {
-    if (!demand[0].requesterBusinessId) throw new Error("Business demand is missing its requester identity");
-    await assertVerifiedBusinessOperationalActivityForUser(userId, demand[0].requesterBusinessId, permissionCode);
+    if (!demand[0].requesterBusinessId)
+      throw new Error("Business demand is missing its requester identity");
+    await assertVerifiedBusinessOperationalActivityForUser(
+      userId,
+      demand[0].requesterBusinessId,
+      permissionCode
+    );
   } else {
-    if (!demand[0].requesterIndividualProfileId) throw new Error("Individual demand is missing its activity profile");
-    await assertVerifiedIndividualActivityProfileForUser(userId, demand[0].requesterIndividualProfileId);
+    if (!demand[0].requesterIndividualProfileId)
+      throw new Error("Individual demand is missing its activity profile");
+    await assertVerifiedIndividualActivityProfileForUser(
+      userId,
+      demand[0].requesterIndividualProfileId
+    );
   }
   return demand[0];
 }
 
-async function assertTradeOfferingController(userId: number, offeringId: number, permissionCode: BusinessPermissionCode) {
+async function assertTradeOfferingController(
+  userId: number,
+  offeringId: number,
+  permissionCode: BusinessPermissionCode
+) {
   const db = requireDatabase(await getDb());
-  const offering = await db.select().from(tradeOfferings).where(eq(tradeOfferings.id, offeringId)).limit(1);
+  const offering = await db
+    .select()
+    .from(tradeOfferings)
+    .where(eq(tradeOfferings.id, offeringId))
+    .limit(1);
   if (!offering[0]) throw new Error("Trade offering was not found");
   if (offering[0].supplierKind === "business") {
-    if (!offering[0].businessId) throw new Error("Business offering is missing its supplier identity");
-    await assertVerifiedBusinessOperationalActivityForUser(userId, offering[0].businessId, permissionCode, offering[0].offeringType);
+    if (!offering[0].businessId)
+      throw new Error("Business offering is missing its supplier identity");
+    await assertVerifiedBusinessOperationalActivityForUser(
+      userId,
+      offering[0].businessId,
+      permissionCode,
+      offering[0].offeringType
+    );
   } else {
-    if (!offering[0].individualProfileId) throw new Error("Individual offering is missing its activity profile");
-    await assertVerifiedIndividualActivityProfileForUser(userId, offering[0].individualProfileId, offering[0].offeringType);
+    if (!offering[0].individualProfileId)
+      throw new Error("Individual offering is missing its activity profile");
+    await assertVerifiedIndividualActivityProfileForUser(
+      userId,
+      offering[0].individualProfileId,
+      offering[0].offeringType
+    );
   }
   return offering[0];
 }
@@ -1973,58 +3265,130 @@ async function assertTradeTransactionParticipant(
   userId: number,
   transactionId: number,
   permissionCode: BusinessPermissionCode,
-  party: "buyer" | "seller" | "any",
+  party: "buyer" | "seller" | "any"
 ) {
   const db = requireDatabase(await getDb());
-  const transaction = await db.select().from(tradeTransactions).where(eq(tradeTransactions.id, transactionId)).limit(1);
+  const transaction = await db
+    .select()
+    .from(tradeTransactions)
+    .where(eq(tradeTransactions.id, transactionId))
+    .limit(1);
   if (!transaction[0]) throw new Error("Trade transaction was not found");
-  if (transaction[0].buyerIndividualProfileId || transaction[0].sellerIndividualProfileId) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Individual commerce remains disabled pending approved C2C policy" });
+  if (
+    transaction[0].buyerIndividualProfileId ||
+    transaction[0].sellerIndividualProfileId
+  ) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message:
+        "Individual commerce remains disabled pending approved C2C policy",
+    });
   }
-  const businessIds = party === "buyer"
-    ? [transaction[0].buyerBusinessId]
-    : party === "seller"
-      ? [transaction[0].sellerBusinessId]
-      : [transaction[0].buyerBusinessId, transaction[0].sellerBusinessId, transaction[0].ownerBusinessId, transaction[0].custodianBusinessId];
-  const uniqueBusinessIds = Array.from(new Set(businessIds.filter((value): value is number => typeof value === "number")));
+  const businessIds =
+    party === "buyer"
+      ? [transaction[0].buyerBusinessId]
+      : party === "seller"
+        ? [transaction[0].sellerBusinessId]
+        : [
+            transaction[0].buyerBusinessId,
+            transaction[0].sellerBusinessId,
+            transaction[0].ownerBusinessId,
+            transaction[0].custodianBusinessId,
+          ];
+  const uniqueBusinessIds = Array.from(
+    new Set(
+      businessIds.filter((value): value is number => typeof value === "number")
+    )
+  );
   for (const businessId of uniqueBusinessIds) {
     try {
-      await authorizeBusinessPermission(userId, businessId, permissionCode, { requireKyc: true, requireVerifiedBusiness: true });
+      await authorizeBusinessPermission(userId, businessId, permissionCode, {
+        requireKyc: true,
+        requireVerifiedBusiness: true,
+      });
       return transaction[0];
     } catch (error) {
-      if (!(error instanceof TRPCError) || error.code !== "FORBIDDEN") throw error;
+      if (!(error instanceof TRPCError) || error.code !== "FORBIDDEN")
+        throw error;
     }
   }
-  throw new TRPCError({ code: "FORBIDDEN", message: "Active, authorized transaction-party membership is required" });
+  throw new TRPCError({
+    code: "FORBIDDEN",
+    message: "Active, authorized transaction-party membership is required",
+  });
 }
 
 export async function createTradeRfqForUser(
   userId: number,
-  input: { matchId: number; requestedQuantity: number; quantityUnit: string; deliveryTermsJson: string; paymentTermsJson: string; validUntil?: Date },
+  input: {
+    matchId: number;
+    requestedQuantity: number;
+    quantityUnit: string;
+    deliveryTermsJson: string;
+    paymentTermsJson: string;
+    validUntil?: Date;
+  }
 ) {
   const db = requireDatabase(await getDb());
-  if (input.requestedQuantity <= 0) throw new Error("Requested quantity must be positive");
-  const match = await db.select().from(tradeMatches).where(eq(tradeMatches.id, input.matchId)).limit(1);
-  if (!match[0] || match[0].status !== "eligible") throw new Error("RFQ requires an eligible trade match");
-  const demand = await assertTradeDemandController(userId, match[0].demandId, "trade.rfq.create");
+  if (input.requestedQuantity <= 0)
+    throw new Error("Requested quantity must be positive");
+  const match = await db
+    .select()
+    .from(tradeMatches)
+    .where(eq(tradeMatches.id, input.matchId))
+    .limit(1);
+  if (!match[0] || match[0].status !== "eligible")
+    throw new Error("RFQ requires an eligible trade match");
+  const demand = await assertTradeDemandController(
+    userId,
+    match[0].demandId,
+    "trade.rfq.create"
+  );
   if (demand.requesterKind !== "business" || !demand.requesterBusinessId) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Individual commerce remains disabled pending approved C2C policy" });
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message:
+        "Individual commerce remains disabled pending approved C2C policy",
+    });
   }
-  const offeringRows = await db.select().from(tradeOfferings).where(eq(tradeOfferings.id, match[0].offeringId)).limit(1);
+  const offeringRows = await db
+    .select()
+    .from(tradeOfferings)
+    .where(eq(tradeOfferings.id, match[0].offeringId))
+    .limit(1);
   const offering = offeringRows[0];
-  if (!offering || offering.supplierKind !== "business" || !offering.businessId) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Individual commerce remains disabled pending approved C2C policy" });
+  if (
+    !offering ||
+    offering.supplierKind !== "business" ||
+    !offering.businessId
+  ) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message:
+        "Individual commerce remains disabled pending approved C2C policy",
+    });
   }
-  if (!offering || offering.verificationStatus !== "verified" || offering.lifecycleStatus !== "published") throw new Error("RFQ requires a verified and published offering");
-  await enforceTradePolicy(userId, "trade.rfq.open", "trade_rfq", `match:${input.matchId}`, {
-    actorControlsDemand: true,
-    kycVerified: true,
-    kybVerified: true,
-    membershipActive: true,
-    matchStatus: match[0].status,
-    offeringVerificationStatus: offering.verificationStatus,
-    offeringLifecycleStatus: offering.lifecycleStatus,
-  });
+  if (
+    !offering ||
+    offering.verificationStatus !== "verified" ||
+    offering.lifecycleStatus !== "published"
+  )
+    throw new Error("RFQ requires a verified and published offering");
+  await enforceTradePolicy(
+    userId,
+    "trade.rfq.open",
+    "trade_rfq",
+    `match:${input.matchId}`,
+    {
+      actorControlsDemand: true,
+      kycVerified: true,
+      kybVerified: true,
+      membershipActive: true,
+      matchStatus: match[0].status,
+      offeringVerificationStatus: offering.verificationStatus,
+      offeringLifecycleStatus: offering.lifecycleStatus,
+    }
+  );
   const inserted = await db.insert(tradeRfqs).values({
     matchId: input.matchId,
     createdByUserId: userId,
@@ -2036,35 +3400,83 @@ export async function createTradeRfqForUser(
     validUntil: input.validUntil ?? null,
   });
   const rfqId = Number(inserted[0].insertId);
-  await appendAuditEvent({ actorUserId: userId, action: "trade_rfq_opened", resourceType: "trade_rfq", resourceId: String(rfqId), dataClassification: "verified", metadata: { matchId: input.matchId, demandId: demand.id, offeringId: offering.id } });
-  const created = await db.select().from(tradeRfqs).where(eq(tradeRfqs.id, rfqId)).limit(1);
+  await appendAuditEvent({
+    actorUserId: userId,
+    action: "trade_rfq_opened",
+    resourceType: "trade_rfq",
+    resourceId: String(rfqId),
+    dataClassification: "verified",
+    metadata: {
+      matchId: input.matchId,
+      demandId: demand.id,
+      offeringId: offering.id,
+    },
+  });
+  const created = await db
+    .select()
+    .from(tradeRfqs)
+    .where(eq(tradeRfqs.id, rfqId))
+    .limit(1);
   if (!created[0]) throw new Error("Failed to load created RFQ");
   return created[0];
 }
 
 export async function submitTradeQuotationForUser(
   userId: number,
-  input: { rfqId: number; quantity: number; unitPriceMinor: number; currencyCode?: string; leadTimeDays: number; termsJson: string; validUntil?: Date },
+  input: {
+    rfqId: number;
+    quantity: number;
+    unitPriceMinor: number;
+    currencyCode?: string;
+    leadTimeDays: number;
+    termsJson: string;
+    validUntil?: Date;
+  }
 ) {
   const db = requireDatabase(await getDb());
-  if (input.quantity <= 0 || input.unitPriceMinor < 0 || input.leadTimeDays < 0) throw new Error("Quotation commercial values are invalid");
-  const rfq = await db.select().from(tradeRfqs).where(eq(tradeRfqs.id, input.rfqId)).limit(1);
-  if (!rfq[0] || !["open", "quoted"].includes(rfq[0].status)) throw new Error("RFQ is not open for quotations");
-  const match = await db.select().from(tradeMatches).where(eq(tradeMatches.id, rfq[0].matchId)).limit(1);
-  if (!match[0] || match[0].status !== "eligible") throw new Error("Quotation requires an eligible match");
-  await assertTradeOfferingController(userId, match[0].offeringId, "trade.quotation.submit");
-  const offering = await db.select().from(tradeOfferings).where(eq(tradeOfferings.id, match[0].offeringId)).limit(1);
-  await enforceTradePolicy(userId, "trade.quotation.submit", "trade_quotation", `rfq:${input.rfqId}`, {
-    actorControlsOffering: true,
-    actorIsParticipant: true,
-    kycVerified: true,
-    kybVerified: true,
-    membershipActive: true,
-    matchStatus: match[0].status,
-    rfqStatus: rfq[0].status,
-    offeringVerificationStatus: offering[0]?.verificationStatus,
-    offeringLifecycleStatus: offering[0]?.lifecycleStatus,
-  });
+  if (input.quantity <= 0 || input.unitPriceMinor < 0 || input.leadTimeDays < 0)
+    throw new Error("Quotation commercial values are invalid");
+  const rfq = await db
+    .select()
+    .from(tradeRfqs)
+    .where(eq(tradeRfqs.id, input.rfqId))
+    .limit(1);
+  if (!rfq[0] || !["open", "quoted"].includes(rfq[0].status))
+    throw new Error("RFQ is not open for quotations");
+  const match = await db
+    .select()
+    .from(tradeMatches)
+    .where(eq(tradeMatches.id, rfq[0].matchId))
+    .limit(1);
+  if (!match[0] || match[0].status !== "eligible")
+    throw new Error("Quotation requires an eligible match");
+  await assertTradeOfferingController(
+    userId,
+    match[0].offeringId,
+    "trade.quotation.submit"
+  );
+  const offering = await db
+    .select()
+    .from(tradeOfferings)
+    .where(eq(tradeOfferings.id, match[0].offeringId))
+    .limit(1);
+  await enforceTradePolicy(
+    userId,
+    "trade.quotation.submit",
+    "trade_quotation",
+    `rfq:${input.rfqId}`,
+    {
+      actorControlsOffering: true,
+      actorIsParticipant: true,
+      kycVerified: true,
+      kybVerified: true,
+      membershipActive: true,
+      matchStatus: match[0].status,
+      rfqStatus: rfq[0].status,
+      offeringVerificationStatus: offering[0]?.verificationStatus,
+      offeringLifecycleStatus: offering[0]?.lifecycleStatus,
+    }
+  );
   const inserted = await db.insert(tradeQuotations).values({
     rfqId: input.rfqId,
     supplierUserId: userId,
@@ -2077,38 +3489,101 @@ export async function submitTradeQuotationForUser(
     validUntil: input.validUntil ?? null,
   });
   const quotationId = Number(inserted[0].insertId);
-  await db.update(tradeRfqs).set({ status: "quoted" }).where(eq(tradeRfqs.id, input.rfqId));
-  await appendAuditEvent({ actorUserId: userId, action: "trade_quotation_submitted", resourceType: "trade_quotation", resourceId: String(quotationId), dataClassification: "verified", metadata: { rfqId: input.rfqId, matchId: rfq[0].matchId } });
-  const created = await db.select().from(tradeQuotations).where(eq(tradeQuotations.id, quotationId)).limit(1);
+  await db
+    .update(tradeRfqs)
+    .set({ status: "quoted" })
+    .where(eq(tradeRfqs.id, input.rfqId));
+  await appendAuditEvent({
+    actorUserId: userId,
+    action: "trade_quotation_submitted",
+    resourceType: "trade_quotation",
+    resourceId: String(quotationId),
+    dataClassification: "verified",
+    metadata: { rfqId: input.rfqId, matchId: rfq[0].matchId },
+  });
+  const created = await db
+    .select()
+    .from(tradeQuotations)
+    .where(eq(tradeQuotations.id, quotationId))
+    .limit(1);
   if (!created[0]) throw new Error("Failed to load created quotation");
   return created[0];
 }
 
-export async function acceptTradeQuotationForUser(userId: number, quotationId: number) {
+export async function acceptTradeQuotationForUser(
+  userId: number,
+  quotationId: number
+) {
   const db = requireDatabase(await getDb());
-  const quotation = await db.select().from(tradeQuotations).where(eq(tradeQuotations.id, quotationId)).limit(1);
-  if (!quotation[0] || !["submitted", "countered"].includes(quotation[0].status)) throw new Error("Quotation is not available for acceptance");
-  const rfq = await db.select().from(tradeRfqs).where(eq(tradeRfqs.id, quotation[0].rfqId)).limit(1);
-  if (!rfq[0] || !["open", "quoted"].includes(rfq[0].status)) throw new Error("RFQ is not available for acceptance");
-  const match = await db.select().from(tradeMatches).where(eq(tradeMatches.id, rfq[0].matchId)).limit(1);
-  if (!match[0] || match[0].status !== "eligible") throw new Error("Transaction requires an eligible match");
-  const demand = await assertTradeDemandController(userId, match[0].demandId, "trade.quotation.accept");
-  const offering = await db.select().from(tradeOfferings).where(eq(tradeOfferings.id, match[0].offeringId)).limit(1);
-  if (!offering[0] || offering[0].verificationStatus !== "verified" || offering[0].lifecycleStatus !== "published") throw new Error("Offering is not commercially active");
-  if (demand.requesterKind !== "business" || !demand.requesterBusinessId || offering[0].supplierKind !== "business" || !offering[0].businessId) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Individual commerce remains disabled pending approved C2C policy" });
+  const quotation = await db
+    .select()
+    .from(tradeQuotations)
+    .where(eq(tradeQuotations.id, quotationId))
+    .limit(1);
+  if (
+    !quotation[0] ||
+    !["submitted", "countered"].includes(quotation[0].status)
+  )
+    throw new Error("Quotation is not available for acceptance");
+  const rfq = await db
+    .select()
+    .from(tradeRfqs)
+    .where(eq(tradeRfqs.id, quotation[0].rfqId))
+    .limit(1);
+  if (!rfq[0] || !["open", "quoted"].includes(rfq[0].status))
+    throw new Error("RFQ is not available for acceptance");
+  const match = await db
+    .select()
+    .from(tradeMatches)
+    .where(eq(tradeMatches.id, rfq[0].matchId))
+    .limit(1);
+  if (!match[0] || match[0].status !== "eligible")
+    throw new Error("Transaction requires an eligible match");
+  const demand = await assertTradeDemandController(
+    userId,
+    match[0].demandId,
+    "trade.quotation.accept"
+  );
+  const offering = await db
+    .select()
+    .from(tradeOfferings)
+    .where(eq(tradeOfferings.id, match[0].offeringId))
+    .limit(1);
+  if (
+    !offering[0] ||
+    offering[0].verificationStatus !== "verified" ||
+    offering[0].lifecycleStatus !== "published"
+  )
+    throw new Error("Offering is not commercially active");
+  if (
+    demand.requesterKind !== "business" ||
+    !demand.requesterBusinessId ||
+    offering[0].supplierKind !== "business" ||
+    !offering[0].businessId
+  ) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message:
+        "Individual commerce remains disabled pending approved C2C policy",
+    });
   }
-  await enforceTradePolicy(userId, "trade.quotation.accept", "trade_transaction", `quotation:${quotationId}`, {
-    actorControlsDemand: true,
-    kycVerified: true,
-    kybVerified: true,
-    membershipActive: true,
-    matchStatus: match[0].status,
-    rfqStatus: rfq[0].status,
-    quotationStatus: quotation[0].status,
-    offeringVerificationStatus: offering[0].verificationStatus,
-    offeringLifecycleStatus: offering[0].lifecycleStatus,
-  });
+  await enforceTradePolicy(
+    userId,
+    "trade.quotation.accept",
+    "trade_transaction",
+    `quotation:${quotationId}`,
+    {
+      actorControlsDemand: true,
+      kycVerified: true,
+      kybVerified: true,
+      membershipActive: true,
+      matchStatus: match[0].status,
+      rfqStatus: rfq[0].status,
+      quotationStatus: quotation[0].status,
+      offeringVerificationStatus: offering[0].verificationStatus,
+      offeringLifecycleStatus: offering[0].lifecycleStatus,
+    }
+  );
   const totalPriceMinor = quotation[0].quantity * quotation[0].unitPriceMinor;
   const transaction = await db.transaction(async tx => {
     const inserted = await tx.insert(tradeTransactions).values({
@@ -2134,141 +3609,496 @@ export async function acceptTradeQuotationForUser(userId: number, quotationId: n
       ownerIndividualProfileId: null,
     });
     const transactionId = Number(inserted[0].insertId);
-    await tx.update(tradeQuotations).set({ status: "accepted" }).where(eq(tradeQuotations.id, quotationId));
-    await tx.update(tradeRfqs).set({ status: "accepted" }).where(eq(tradeRfqs.id, rfq[0].id));
+    await tx
+      .update(tradeQuotations)
+      .set({ status: "accepted" })
+      .where(eq(tradeQuotations.id, quotationId));
+    await tx
+      .update(tradeRfqs)
+      .set({ status: "accepted" })
+      .where(eq(tradeRfqs.id, rfq[0].id));
     return transactionId;
   });
-  await appendAuditEvent({ actorUserId: userId, action: "trade_transaction_accepted", resourceType: "trade_transaction", resourceId: String(transaction), dataClassification: "verified", metadata: { quotationId, rfqId: rfq[0].id, matchId: match[0].id, totalPriceMinor, ownershipDetermination: "unresolved" } });
-  const created = await db.select().from(tradeTransactions).where(eq(tradeTransactions.id, transaction)).limit(1);
+  await appendAuditEvent({
+    actorUserId: userId,
+    action: "trade_transaction_accepted",
+    resourceType: "trade_transaction",
+    resourceId: String(transaction),
+    dataClassification: "verified",
+    metadata: {
+      quotationId,
+      rfqId: rfq[0].id,
+      matchId: match[0].id,
+      totalPriceMinor,
+      ownershipDetermination: "unresolved",
+    },
+  });
+  const created = await db
+    .select()
+    .from(tradeTransactions)
+    .where(eq(tradeTransactions.id, transaction))
+    .limit(1);
   if (!created[0]) throw new Error("Failed to load created transaction");
   return created[0];
 }
 
-export async function updateTradeTransactionPaymentForUser(userId: number, transactionId: number, paymentStatus: "cash_pending" | "bank_transfer_pending" | "credit_terms" | "external_recorded" | "settled") {
+export async function updateTradeTransactionPaymentForUser(
+  userId: number,
+  transactionId: number,
+  paymentStatus:
+    | "cash_pending"
+    | "bank_transfer_pending"
+    | "credit_terms"
+    | "external_recorded"
+    | "settled"
+) {
   const db = requireDatabase(await getDb());
-  const transaction = await assertTradeTransactionParticipant(userId, transactionId, "trade.payment.update", "any");
-  await enforceTradePolicy(userId, "trade.payment.update", "trade_transaction", String(transactionId), {
-    actorIsParticipant: true,
-    transactionStatus: transaction.status,
+  const transaction = await assertTradeTransactionParticipant(
+    userId,
+    transactionId,
+    "trade.payment.update",
+    "any"
+  );
+  await enforceTradePolicy(
+    userId,
+    "trade.payment.update",
+    "trade_transaction",
+    String(transactionId),
+    {
+      actorIsParticipant: true,
+      transactionStatus: transaction.status,
+    }
+  );
+  if (transaction.status === "closed" || transaction.status === "cancelled")
+    throw new Error(
+      "Closed or cancelled transactions cannot change payment status"
+    );
+  await db
+    .update(tradeTransactions)
+    .set({ paymentStatus })
+    .where(eq(tradeTransactions.id, transactionId));
+  await appendAuditEvent({
+    actorUserId: userId,
+    action: "trade_payment_status_updated",
+    resourceType: "trade_transaction",
+    resourceId: String(transactionId),
+    dataClassification: "verified",
+    metadata: { paymentStatus },
   });
-  if (transaction.status === "closed" || transaction.status === "cancelled") throw new Error("Closed or cancelled transactions cannot change payment status");
-  await db.update(tradeTransactions).set({ paymentStatus }).where(eq(tradeTransactions.id, transactionId));
-  await appendAuditEvent({ actorUserId: userId, action: "trade_payment_status_updated", resourceType: "trade_transaction", resourceId: String(transactionId), dataClassification: "verified", metadata: { paymentStatus } });
   return { transactionId, paymentStatus };
 }
 
-export async function createTransportJobForUser(userId: number, input: { transactionId: number; providerBusinessId: number; pickupLocationJson: string; deliveryLocationJson: string; driverReference?: string; vehicleReference?: string }) {
+export async function createTransportJobForUser(
+  userId: number,
+  input: {
+    transactionId: number;
+    providerBusinessId: number;
+    pickupLocationJson: string;
+    deliveryLocationJson: string;
+    driverReference?: string;
+    vehicleReference?: string;
+  }
+) {
   const db = requireDatabase(await getDb());
-  const transaction = await assertTradeTransactionParticipant(userId, input.transactionId, "trade.transport.assign", "any");
-  if (!["accepted", "processing", "ready_for_pickup"].includes(transaction.status)) throw new Error("Transport can only be assigned before transit");
-  await assertVerifiedBusinessOperationalActivityForUser(userId, input.providerBusinessId, "trade.transport.assign", "service");
-  await enforceTradePolicy(userId, "trade.transport.assign", "transport_job", `transaction:${input.transactionId}`, {
-    actorIsParticipant: true,
-    operationalActivityVerified: true,
-    transportProviderVerified: true,
-    transactionStatus: transaction.status,
+  const transaction = await assertTradeTransactionParticipant(
+    userId,
+    input.transactionId,
+    "trade.transport.assign",
+    "any"
+  );
+  if (
+    !["accepted", "processing", "ready_for_pickup"].includes(transaction.status)
+  )
+    throw new Error("Transport can only be assigned before transit");
+  await assertVerifiedBusinessOperationalActivityForUser(
+    userId,
+    input.providerBusinessId,
+    "trade.transport.assign",
+    "service"
+  );
+  await enforceTradePolicy(
+    userId,
+    "trade.transport.assign",
+    "transport_job",
+    `transaction:${input.transactionId}`,
+    {
+      actorIsParticipant: true,
+      operationalActivityVerified: true,
+      transportProviderVerified: true,
+      transactionStatus: transaction.status,
+    }
+  );
+  const inserted = await db.insert(transportJobs).values({
+    transactionId: input.transactionId,
+    providerBusinessId: input.providerBusinessId,
+    pickupLocationJson: input.pickupLocationJson,
+    deliveryLocationJson: input.deliveryLocationJson,
+    driverReference: input.driverReference ?? null,
+    vehicleReference: input.vehicleReference ?? null,
+    status: "assigned",
   });
-  const inserted = await db.insert(transportJobs).values({ transactionId: input.transactionId, providerBusinessId: input.providerBusinessId, pickupLocationJson: input.pickupLocationJson, deliveryLocationJson: input.deliveryLocationJson, driverReference: input.driverReference ?? null, vehicleReference: input.vehicleReference ?? null, status: "assigned" });
   const jobId = Number(inserted[0].insertId);
-  await db.update(tradeTransactions).set({ status: "processing", custodianBusinessId: input.providerBusinessId }).where(eq(tradeTransactions.id, input.transactionId));
-  await appendAuditEvent({ actorUserId: userId, action: "trade_transport_assigned", resourceType: "transport_job", resourceId: String(jobId), dataClassification: "verified", metadata: { transactionId: transaction.id, providerBusinessId: input.providerBusinessId } });
-  const created = await db.select().from(transportJobs).where(eq(transportJobs.id, jobId)).limit(1);
+  await db
+    .update(tradeTransactions)
+    .set({
+      status: "processing",
+      custodianBusinessId: input.providerBusinessId,
+    })
+    .where(eq(tradeTransactions.id, input.transactionId));
+  await appendAuditEvent({
+    actorUserId: userId,
+    action: "trade_transport_assigned",
+    resourceType: "transport_job",
+    resourceId: String(jobId),
+    dataClassification: "verified",
+    metadata: {
+      transactionId: transaction.id,
+      providerBusinessId: input.providerBusinessId,
+    },
+  });
+  const created = await db
+    .select()
+    .from(transportJobs)
+    .where(eq(transportJobs.id, jobId))
+    .limit(1);
   if (!created[0]) throw new Error("Failed to load created transport job");
   return created[0];
 }
 
-export async function advanceTradeTransportForUser(userId: number, jobId: number, status: "ready" | "picked_up" | "in_transit") {
+export async function advanceTradeTransportForUser(
+  userId: number,
+  jobId: number,
+  status: "ready" | "picked_up" | "in_transit"
+) {
   const db = requireDatabase(await getDb());
-  const job = await db.select().from(transportJobs).where(eq(transportJobs.id, jobId)).limit(1);
+  const job = await db
+    .select()
+    .from(transportJobs)
+    .where(eq(transportJobs.id, jobId))
+    .limit(1);
   if (!job[0]) throw new Error("Transport job was not found");
-  await assertTradeTransactionParticipant(userId, job[0].transactionId, "trade.transport.advance", "any");
-  await assertVerifiedBusinessOperationalActivityForUser(userId, job[0].providerBusinessId, "trade.transport.advance", "service");
-  const allowed: Record<string, string[]> = { assigned: ["ready"], ready: ["picked_up"], picked_up: ["in_transit"] };
-  if (!allowed[job[0].status]?.includes(status)) throw new Error(`Transport transition from ${job[0].status} to ${status} is not allowed`);
-  await enforceTradePolicy(userId, "trade.transport.advance", "transport_job", String(jobId), {
-    actorIsParticipant: true,
-    transportStatus: job[0].status,
-    requestedTransition: status,
+  await assertTradeTransactionParticipant(
+    userId,
+    job[0].transactionId,
+    "trade.transport.advance",
+    "any"
+  );
+  await assertVerifiedBusinessOperationalActivityForUser(
+    userId,
+    job[0].providerBusinessId,
+    "trade.transport.advance",
+    "service"
+  );
+  const allowed: Record<string, string[]> = {
+    assigned: ["ready"],
+    ready: ["picked_up"],
+    picked_up: ["in_transit"],
+  };
+  if (!allowed[job[0].status]?.includes(status))
+    throw new Error(
+      `Transport transition from ${job[0].status} to ${status} is not allowed`
+    );
+  await enforceTradePolicy(
+    userId,
+    "trade.transport.advance",
+    "transport_job",
+    String(jobId),
+    {
+      actorIsParticipant: true,
+      transportStatus: job[0].status,
+      requestedTransition: status,
+    }
+  );
+  await db
+    .update(transportJobs)
+    .set({ status, pickupAt: status === "picked_up" ? new Date() : undefined })
+    .where(eq(transportJobs.id, jobId));
+  await db
+    .update(tradeTransactions)
+    .set({
+      status: status === "in_transit" ? "in_transit" : "ready_for_pickup",
+    })
+    .where(eq(tradeTransactions.id, job[0].transactionId));
+  await appendAuditEvent({
+    actorUserId: userId,
+    action: "trade_transport_advanced",
+    resourceType: "transport_job",
+    resourceId: String(jobId),
+    dataClassification: "verified",
+    metadata: { transactionId: job[0].transactionId, status },
   });
-  await db.update(transportJobs).set({ status, pickupAt: status === "picked_up" ? new Date() : undefined }).where(eq(transportJobs.id, jobId));
-  await db.update(tradeTransactions).set({ status: status === "in_transit" ? "in_transit" : "ready_for_pickup" }).where(eq(tradeTransactions.id, job[0].transactionId));
-  await appendAuditEvent({ actorUserId: userId, action: "trade_transport_advanced", resourceType: "transport_job", resourceId: String(jobId), dataClassification: "verified", metadata: { transactionId: job[0].transactionId, status } });
   return { jobId, transactionId: job[0].transactionId, status };
 }
 
-export async function recordTradeDeliveryForUser(userId: number, input: { transactionId: number; transportJobId: number; deliveredQuantity: number; proofReference: string; notes?: string }) {
+export async function recordTradeDeliveryForUser(
+  userId: number,
+  input: {
+    transactionId: number;
+    transportJobId: number;
+    deliveredQuantity: number;
+    proofReference: string;
+    notes?: string;
+  }
+) {
   const db = requireDatabase(await getDb());
-  const transaction = await assertTradeTransactionParticipant(userId, input.transactionId, "trade.delivery.record", "any");
-  if (!["in_transit", "ready_for_pickup"].includes(transaction.status)) throw new Error("Delivery requires an in-transit transaction");
-  const job = await db.select().from(transportJobs).where(and(eq(transportJobs.id, input.transportJobId), eq(transportJobs.transactionId, input.transactionId))).limit(1);
-  if (!job[0]) throw new Error("Transport job does not belong to this transaction");
-  await assertVerifiedBusinessOperationalActivityForUser(userId, job[0].providerBusinessId, "trade.delivery.record", "service");
-  await enforceTradePolicy(userId, "trade.delivery.record", "transaction_delivery", `transaction:${input.transactionId}`, {
-    actorIsParticipant: true,
-    transactionStatus: transaction.status,
-    deliveryTransactionMatches: true,
+  const transaction = await assertTradeTransactionParticipant(
+    userId,
+    input.transactionId,
+    "trade.delivery.record",
+    "any"
+  );
+  if (!["in_transit", "ready_for_pickup"].includes(transaction.status))
+    throw new Error("Delivery requires an in-transit transaction");
+  const job = await db
+    .select()
+    .from(transportJobs)
+    .where(
+      and(
+        eq(transportJobs.id, input.transportJobId),
+        eq(transportJobs.transactionId, input.transactionId)
+      )
+    )
+    .limit(1);
+  if (!job[0])
+    throw new Error("Transport job does not belong to this transaction");
+  await assertVerifiedBusinessOperationalActivityForUser(
+    userId,
+    job[0].providerBusinessId,
+    "trade.delivery.record",
+    "service"
+  );
+  await enforceTradePolicy(
+    userId,
+    "trade.delivery.record",
+    "transaction_delivery",
+    `transaction:${input.transactionId}`,
+    {
+      actorIsParticipant: true,
+      transactionStatus: transaction.status,
+      deliveryTransactionMatches: true,
+    }
+  );
+  const inserted = await db.insert(transactionDeliveries).values({
+    transactionId: input.transactionId,
+    transportJobId: input.transportJobId,
+    deliveredQuantity: input.deliveredQuantity,
+    acceptanceStatus: "pending",
+    proofReference: input.proofReference,
+    notes: input.notes ?? null,
+    deliveredAt: new Date(),
   });
-  const inserted = await db.insert(transactionDeliveries).values({ transactionId: input.transactionId, transportJobId: input.transportJobId, deliveredQuantity: input.deliveredQuantity, acceptanceStatus: "pending", proofReference: input.proofReference, notes: input.notes ?? null, deliveredAt: new Date() });
   const deliveryId = Number(inserted[0].insertId);
-  await db.update(transportJobs).set({ status: "delivered", deliveryAt: new Date() }).where(eq(transportJobs.id, input.transportJobId));
-  await db.update(tradeTransactions).set({ status: "delivered" }).where(eq(tradeTransactions.id, input.transactionId));
-  await appendAuditEvent({ actorUserId: userId, action: "trade_delivery_recorded", resourceType: "transaction_delivery", resourceId: String(deliveryId), dataClassification: "verified", metadata: { transactionId: input.transactionId, transportJobId: input.transportJobId, deliveredQuantity: input.deliveredQuantity } });
-  return { deliveryId, transactionId: input.transactionId, status: "delivered" as const };
+  await db
+    .update(transportJobs)
+    .set({ status: "delivered", deliveryAt: new Date() })
+    .where(eq(transportJobs.id, input.transportJobId));
+  await db
+    .update(tradeTransactions)
+    .set({ status: "delivered" })
+    .where(eq(tradeTransactions.id, input.transactionId));
+  await appendAuditEvent({
+    actorUserId: userId,
+    action: "trade_delivery_recorded",
+    resourceType: "transaction_delivery",
+    resourceId: String(deliveryId),
+    dataClassification: "verified",
+    metadata: {
+      transactionId: input.transactionId,
+      transportJobId: input.transportJobId,
+      deliveredQuantity: input.deliveredQuantity,
+    },
+  });
+  return {
+    deliveryId,
+    transactionId: input.transactionId,
+    status: "delivered" as const,
+  };
 }
 
-export async function acceptTradeDeliveryForUser(userId: number, deliveryId: number, acceptanceStatus: "accepted_full" | "accepted_partial" | "rejected" | "damaged" | "shortage", notes?: string) {
+export async function acceptTradeDeliveryForUser(
+  userId: number,
+  deliveryId: number,
+  acceptanceStatus:
+    | "accepted_full"
+    | "accepted_partial"
+    | "rejected"
+    | "damaged"
+    | "shortage",
+  notes?: string
+) {
   const db = requireDatabase(await getDb());
-  const delivery = await db.select().from(transactionDeliveries).where(eq(transactionDeliveries.id, deliveryId)).limit(1);
+  const delivery = await db
+    .select()
+    .from(transactionDeliveries)
+    .where(eq(transactionDeliveries.id, deliveryId))
+    .limit(1);
   if (!delivery[0]) throw new Error("Transaction delivery was not found");
-  const transaction = await assertTradeTransactionParticipant(userId, delivery[0].transactionId, "trade.delivery.accept", "buyer");
-  await enforceTradePolicy(userId, "trade.delivery.accept", "transaction_delivery", String(deliveryId), {
-    actorIsParticipant: true,
-    actorIsBuyer: true,
-    transactionStatus: transaction.status,
-  });
-  if (transaction.status !== "delivered") throw new Error("Only delivered transactions can be received");
-  if (acceptanceStatus === "accepted_full" || acceptanceStatus === "accepted_partial") {
-    await db.update(transactionDeliveries).set({ acceptanceStatus, receivedByUserId: userId, receivedAt: new Date(), notes: notes ?? delivery[0].notes }).where(eq(transactionDeliveries.id, deliveryId));
-    await db.update(tradeTransactions).set({ status: "received" }).where(eq(tradeTransactions.id, transaction.id));
+  const transaction = await assertTradeTransactionParticipant(
+    userId,
+    delivery[0].transactionId,
+    "trade.delivery.accept",
+    "buyer"
+  );
+  await enforceTradePolicy(
+    userId,
+    "trade.delivery.accept",
+    "transaction_delivery",
+    String(deliveryId),
+    {
+      actorIsParticipant: true,
+      actorIsBuyer: true,
+      transactionStatus: transaction.status,
+    }
+  );
+  if (transaction.status !== "delivered")
+    throw new Error("Only delivered transactions can be received");
+  if (
+    acceptanceStatus === "accepted_full" ||
+    acceptanceStatus === "accepted_partial"
+  ) {
+    await db
+      .update(transactionDeliveries)
+      .set({
+        acceptanceStatus,
+        receivedByUserId: userId,
+        receivedAt: new Date(),
+        notes: notes ?? delivery[0].notes,
+      })
+      .where(eq(transactionDeliveries.id, deliveryId));
+    await db
+      .update(tradeTransactions)
+      .set({ status: "received" })
+      .where(eq(tradeTransactions.id, transaction.id));
   } else {
-    await db.update(transactionDeliveries).set({ acceptanceStatus, receivedByUserId: userId, receivedAt: new Date(), notes: notes ?? delivery[0].notes }).where(eq(transactionDeliveries.id, deliveryId));
-    await db.update(tradeTransactions).set({ status: "disputed" }).where(eq(tradeTransactions.id, transaction.id));
+    await db
+      .update(transactionDeliveries)
+      .set({
+        acceptanceStatus,
+        receivedByUserId: userId,
+        receivedAt: new Date(),
+        notes: notes ?? delivery[0].notes,
+      })
+      .where(eq(transactionDeliveries.id, deliveryId));
+    await db
+      .update(tradeTransactions)
+      .set({ status: "disputed" })
+      .where(eq(tradeTransactions.id, transaction.id));
   }
-  await appendAuditEvent({ actorUserId: userId, action: "trade_delivery_received", resourceType: "transaction_delivery", resourceId: String(deliveryId), dataClassification: "verified", metadata: { transactionId: transaction.id, acceptanceStatus } });
+  await appendAuditEvent({
+    actorUserId: userId,
+    action: "trade_delivery_received",
+    resourceType: "transaction_delivery",
+    resourceId: String(deliveryId),
+    dataClassification: "verified",
+    metadata: { transactionId: transaction.id, acceptanceStatus },
+  });
   return { deliveryId, transactionId: transaction.id, acceptanceStatus };
 }
 
-export async function closeTradeTransactionForUser(userId: number, transactionId: number) {
+export async function closeTradeTransactionForUser(
+  userId: number,
+  transactionId: number
+) {
   const db = requireDatabase(await getDb());
-  const transaction = await assertTradeTransactionParticipant(userId, transactionId, "trade.transaction.close", "buyer");
-  await enforceTradePolicy(userId, "trade.transaction.close", "trade_transaction", String(transactionId), {
-    actorIsParticipant: true,
-    actorIsBuyer: true,
-    transactionStatus: transaction.status,
-    paymentStatus: transaction.paymentStatus,
-  });
-  if (transaction.status !== "received") throw new Error("Transaction must be received before closure");
-  if (!["settled", "external_recorded", "credit_terms"].includes(transaction.paymentStatus)) throw new Error("Transaction payment must be settled, externally recorded, or under approved credit terms");
-  await db.update(tradeTransactions).set({ status: "closed", closedAt: new Date() }).where(eq(tradeTransactions.id, transactionId));
-  await db.update(tradeDemands).set({ status: "fulfilled" }).where(eq(tradeDemands.id, transaction.demandId));
+  const transaction = await assertTradeTransactionParticipant(
+    userId,
+    transactionId,
+    "trade.transaction.close",
+    "buyer"
+  );
+  await enforceTradePolicy(
+    userId,
+    "trade.transaction.close",
+    "trade_transaction",
+    String(transactionId),
+    {
+      actorIsParticipant: true,
+      actorIsBuyer: true,
+      transactionStatus: transaction.status,
+      paymentStatus: transaction.paymentStatus,
+    }
+  );
+  if (transaction.status !== "received")
+    throw new Error("Transaction must be received before closure");
+  if (
+    !["settled", "external_recorded", "credit_terms"].includes(
+      transaction.paymentStatus
+    )
+  )
+    throw new Error(
+      "Transaction payment must be settled, externally recorded, or under approved credit terms"
+    );
+  await db
+    .update(tradeTransactions)
+    .set({ status: "closed", closedAt: new Date() })
+    .where(eq(tradeTransactions.id, transactionId));
+  await db
+    .update(tradeDemands)
+    .set({ status: "fulfilled" })
+    .where(eq(tradeDemands.id, transaction.demandId));
   // The offering remains published as a reusable product identity; fulfillment is recorded on the demand and transaction.
-  await appendAuditEvent({ actorUserId: userId, action: "trade_transaction_closed", resourceType: "trade_transaction", resourceId: String(transactionId), dataClassification: "verified", metadata: { demandId: transaction.demandId, offeringId: transaction.offeringId, paymentStatus: transaction.paymentStatus } });
+  await appendAuditEvent({
+    actorUserId: userId,
+    action: "trade_transaction_closed",
+    resourceType: "trade_transaction",
+    resourceId: String(transactionId),
+    dataClassification: "verified",
+    metadata: {
+      demandId: transaction.demandId,
+      offeringId: transaction.offeringId,
+      paymentStatus: transaction.paymentStatus,
+    },
+  });
   return { transactionId, status: "closed" as const };
 }
 
-export async function fileTradeDisputeForUser(userId: number, input: { transactionId: number; reason: string }) {
+export async function fileTradeDisputeForUser(
+  userId: number,
+  input: { transactionId: number; reason: string }
+) {
   const db = requireDatabase(await getDb());
-  const transaction = await assertTradeTransactionParticipant(userId, input.transactionId, "trade.dispute.open", "any");
-  await enforceTradePolicy(userId, "trade.dispute.open", "transaction_dispute", `transaction:${input.transactionId}`, {
-    actorIsParticipant: true,
-    transactionStatus: transaction.status,
+  const transaction = await assertTradeTransactionParticipant(
+    userId,
+    input.transactionId,
+    "trade.dispute.open",
+    "any"
+  );
+  await enforceTradePolicy(
+    userId,
+    "trade.dispute.open",
+    "transaction_dispute",
+    `transaction:${input.transactionId}`,
+    {
+      actorIsParticipant: true,
+      transactionStatus: transaction.status,
+    }
+  );
+  if (["closed", "cancelled"].includes(transaction.status))
+    throw new Error("Closed or cancelled transactions cannot be disputed");
+  const inserted = await db.insert(transactionDisputes).values({
+    transactionId: input.transactionId,
+    filedByUserId: userId,
+    reason: input.reason,
+    status: "open",
   });
-  if (["closed", "cancelled"].includes(transaction.status)) throw new Error("Closed or cancelled transactions cannot be disputed");
-  const inserted = await db.insert(transactionDisputes).values({ transactionId: input.transactionId, filedByUserId: userId, reason: input.reason, status: "open" });
   const disputeId = Number(inserted[0].insertId);
-  await db.update(tradeTransactions).set({ status: "disputed" }).where(eq(tradeTransactions.id, input.transactionId));
-  await appendAuditEvent({ actorUserId: userId, action: "trade_dispute_filed", resourceType: "transaction_dispute", resourceId: String(disputeId), dataClassification: "restricted", metadata: { transactionId: input.transactionId } });
-  return { disputeId, transactionId: input.transactionId, status: "open" as const };
+  await db
+    .update(tradeTransactions)
+    .set({ status: "disputed" })
+    .where(eq(tradeTransactions.id, input.transactionId));
+  await appendAuditEvent({
+    actorUserId: userId,
+    action: "trade_dispute_filed",
+    resourceType: "transaction_dispute",
+    resourceId: String(disputeId),
+    dataClassification: "restricted",
+    metadata: { transactionId: input.transactionId },
+  });
+  return {
+    disputeId,
+    transactionId: input.transactionId,
+    status: "open" as const,
+  };
 }
 
 export async function listTradeRfqsForUser(userId: number) {
@@ -2282,7 +4112,16 @@ export async function listTradeRfqsForUser(userId: number) {
     .orderBy(desc(tradeRfqs.updatedAt), desc(tradeRfqs.id));
   const visible = [];
   for (const row of rows) {
-    if (row.businessId && await canAuthorizeBusinessPermission(userId, row.businessId, "trade.rfq.read", { requireVerifiedBusiness: true })) visible.push(row.rfq);
+    if (
+      row.businessId &&
+      (await canAuthorizeBusinessPermission(
+        userId,
+        row.businessId,
+        "trade.rfq.read",
+        { requireVerifiedBusiness: true }
+      ))
+    )
+      visible.push(row.rfq);
   }
   return visible;
 }
@@ -2290,51 +4129,95 @@ export async function listTradeRfqsForUser(userId: number) {
 export async function listTradeQuotationsForUser(userId: number) {
   const db = requireDatabase(await getDb());
   const rows = await db
-    .select({ quotation: tradeQuotations, rfq: tradeRfqs, buyerBusinessId: tradeDemands.requesterBusinessId, supplierBusinessId: tradeOfferings.businessId })
+    .select({
+      quotation: tradeQuotations,
+      rfq: tradeRfqs,
+      buyerBusinessId: tradeDemands.requesterBusinessId,
+      supplierBusinessId: tradeOfferings.businessId,
+    })
     .from(tradeQuotations)
     .innerJoin(tradeRfqs, eq(tradeQuotations.rfqId, tradeRfqs.id))
     .innerJoin(tradeMatches, eq(tradeRfqs.matchId, tradeMatches.id))
     .innerJoin(tradeDemands, eq(tradeMatches.demandId, tradeDemands.id))
     .innerJoin(tradeOfferings, eq(tradeMatches.offeringId, tradeOfferings.id))
-    .where(or(eq(tradeQuotations.supplierUserId, userId), eq(tradeRfqs.createdByUserId, userId)))
+    .where(
+      or(
+        eq(tradeQuotations.supplierUserId, userId),
+        eq(tradeRfqs.createdByUserId, userId)
+      )
+    )
     .orderBy(desc(tradeQuotations.updatedAt), desc(tradeQuotations.id));
   const visible = [];
   for (const row of rows) {
-    const buyerAllowed = row.rfq.createdByUserId === userId && row.buyerBusinessId
-      ? await canAuthorizeBusinessPermission(userId, row.buyerBusinessId, "trade.quotation.read", { requireVerifiedBusiness: true })
-      : false;
-    const supplierAllowed = row.quotation.supplierUserId === userId && row.supplierBusinessId
-      ? await canAuthorizeBusinessPermission(userId, row.supplierBusinessId, "trade.quotation.read", { requireVerifiedBusiness: true })
-      : false;
-    if (buyerAllowed || supplierAllowed) visible.push({ quotation: row.quotation, rfq: row.rfq });
+    const buyerAllowed =
+      row.rfq.createdByUserId === userId && row.buyerBusinessId
+        ? await canAuthorizeBusinessPermission(
+            userId,
+            row.buyerBusinessId,
+            "trade.quotation.read",
+            { requireVerifiedBusiness: true }
+          )
+        : false;
+    const supplierAllowed =
+      row.quotation.supplierUserId === userId && row.supplierBusinessId
+        ? await canAuthorizeBusinessPermission(
+            userId,
+            row.supplierBusinessId,
+            "trade.quotation.read",
+            { requireVerifiedBusiness: true }
+          )
+        : false;
+    if (buyerAllowed || supplierAllowed)
+      visible.push({ quotation: row.quotation, rfq: row.rfq });
   }
   return visible;
 }
 
 export async function listTradeTransactionsForUser(userId: number) {
   const db = requireDatabase(await getDb());
-  const memberships = await db.select({ businessId: businessMemberships.businessId }).from(businessMemberships)
-    .where(and(eq(businessMemberships.userId, userId), eq(businessMemberships.status, "active")));
-  const businessIds = Array.from(new Set(memberships.map(row => row.businessId)));
+  const memberships = await db
+    .select({ businessId: businessMemberships.businessId })
+    .from(businessMemberships)
+    .where(
+      and(
+        eq(businessMemberships.userId, userId),
+        eq(businessMemberships.status, "active")
+      )
+    );
+  const businessIds = Array.from(
+    new Set(memberships.map(row => row.businessId))
+  );
   if (businessIds.length === 0) return [];
-  const rows = await db.select().from(tradeTransactions).where(or(
-    inArray(tradeTransactions.buyerBusinessId, businessIds),
-    inArray(tradeTransactions.sellerBusinessId, businessIds),
-    inArray(tradeTransactions.ownerBusinessId, businessIds),
-    inArray(tradeTransactions.custodianBusinessId, businessIds),
-  )).orderBy(desc(tradeTransactions.updatedAt), desc(tradeTransactions.id));
+  const rows = await db
+    .select()
+    .from(tradeTransactions)
+    .where(
+      or(
+        inArray(tradeTransactions.buyerBusinessId, businessIds),
+        inArray(tradeTransactions.sellerBusinessId, businessIds),
+        inArray(tradeTransactions.ownerBusinessId, businessIds),
+        inArray(tradeTransactions.custodianBusinessId, businessIds)
+      )
+    )
+    .orderBy(desc(tradeTransactions.updatedAt), desc(tradeTransactions.id));
   const visible = [];
   for (const row of rows) {
     try {
-      await assertTradeTransactionParticipant(userId, row.id, "trade.transaction.read", "any");
+      await assertTradeTransactionParticipant(
+        userId,
+        row.id,
+        "trade.transaction.read",
+        "any"
+      );
       visible.push(row);
     } catch (error) {
-      if (!(error instanceof TRPCError) || error.code !== "FORBIDDEN") throw error;
+      if (!(error instanceof TRPCError) || error.code !== "FORBIDDEN")
+        throw error;
     }
   }
   return visible;
 }
- type HealthProviderType =
+type HealthProviderType =
   | "hospital"
   | "clinic"
   | "laboratory"
@@ -2343,7 +4226,11 @@ export async function listTradeTransactionsForUser(userId: number) {
   | "emergency_service"
   | "other";
 
-type HealthProviderRole = "provider_admin" | "health_professional" | "emergency_clinician" | "compliance_reviewer";
+type HealthProviderRole =
+  | "provider_admin"
+  | "health_professional"
+  | "emergency_clinician"
+  | "compliance_reviewer";
 
 type HealthConsentStatus = "draft" | "active" | "revoked" | "expired";
 
@@ -2356,7 +4243,11 @@ type HealthRecordSourceType =
   | "medication_dispense"
   | "medical_document";
 
-type HealthRecordProvenanceStatus = "submitted" | "verified" | "rejected" | "superseded";
+type HealthRecordProvenanceStatus =
+  | "submitted"
+  | "verified"
+  | "rejected"
+  | "superseded";
 
 function hashHealthScope(scopeCodes: string[]) {
   return createHash("sha256")
@@ -2365,8 +4256,11 @@ function hashHealthScope(scopeCodes: string[]) {
 }
 
 function normaliseScopeCodes(scopeCodes: string[]) {
-  const values = Array.from(new Set(scopeCodes.map(value => value.trim()).filter(Boolean)));
-  if (values.length === 0) throw new Error("At least one health access scope is required");
+  const values = Array.from(
+    new Set(scopeCodes.map(value => value.trim()).filter(Boolean))
+  );
+  if (values.length === 0)
+    throw new Error("At least one health access scope is required");
   return values.sort();
 }
 
@@ -2374,7 +4268,9 @@ function consentCoversScope(scopeJson: string, requestedScopeCodes: string[]) {
   try {
     const parsed = JSON.parse(scopeJson) as { scopeCodes?: unknown };
     const allowed = Array.isArray(parsed.scopeCodes)
-      ? parsed.scopeCodes.filter((value): value is string => typeof value === "string")
+      ? parsed.scopeCodes.filter(
+          (value): value is string => typeof value === "string"
+        )
       : [];
     return requestedScopeCodes.every(scope => allowed.includes(scope));
   } catch {
@@ -2390,22 +4286,31 @@ async function getHealthProfileForUserOrThrow(userId: number) {
     .from(healthProfiles)
     .where(eq(healthProfiles.personId, person.id))
     .limit(1);
-  if (!profile[0]) throw new Error("A health profile has not been created for this verified identity");
+  if (!profile[0])
+    throw new Error(
+      "A health profile has not been created for this verified identity"
+    );
   return { person, profile: profile[0] };
 }
 
 async function getActiveHealthRole(userId: number, healthProviderId: number) {
   const db = requireDatabase(await getDb());
   const role = await db
-    .select({ role: healthProviderRoles.role, providerStatus: healthProviders.verificationStatus })
+    .select({
+      role: healthProviderRoles.role,
+      providerStatus: healthProviders.verificationStatus,
+    })
     .from(healthProviderRoles)
-    .innerJoin(healthProviders, eq(healthProviderRoles.healthProviderId, healthProviders.id))
+    .innerJoin(
+      healthProviders,
+      eq(healthProviderRoles.healthProviderId, healthProviders.id)
+    )
     .where(
       and(
         eq(healthProviderRoles.userId, userId),
         eq(healthProviderRoles.healthProviderId, healthProviderId),
-        eq(healthProviderRoles.status, "active"),
-      ),
+        eq(healthProviderRoles.status, "active")
+      )
     )
     .limit(1);
   return role[0];
@@ -2428,14 +4333,24 @@ export async function listVerifiedHealthProviders() {
 export async function getHealthProfileSummaryForUser(userId: number) {
   const db = requireDatabase(await getDb());
   const person = await getOrCreatePersonForUser(userId);
+  const effectiveKycStatus = await getEffectiveKycStatus(person.id, person.kycStatus);
   const profile = await db
-    .select({ id: healthProfiles.id, status: healthProfiles.status, createdAt: healthProfiles.createdAt, updatedAt: healthProfiles.updatedAt })
+    .select({
+      id: healthProfiles.id,
+      status: healthProfiles.status,
+      createdAt: healthProfiles.createdAt,
+      updatedAt: healthProfiles.updatedAt,
+    })
     .from(healthProfiles)
     .where(eq(healthProfiles.personId, person.id))
     .limit(1);
 
   if (!profile[0]) {
-    return { kycStatus: person.kycStatus, profile: null, consents: [] as const };
+    return {
+      kycStatus: effectiveKycStatus,
+      profile: null,
+      consents: [] as const,
+    };
   }
 
   const consents = await db
@@ -2451,24 +4366,41 @@ export async function getHealthProfileSummaryForUser(userId: number) {
       revokedAt: healthConsents.revokedAt,
     })
     .from(healthConsents)
-    .innerJoin(healthProviders, eq(healthConsents.beneficiaryProviderId, healthProviders.id))
+    .innerJoin(
+      healthProviders,
+      eq(healthConsents.beneficiaryProviderId, healthProviders.id)
+    )
     .where(eq(healthConsents.healthProfileId, profile[0].id))
     .orderBy(desc(healthConsents.createdAt));
 
-  return { kycStatus: person.kycStatus, profile: profile[0], consents };
+  return { kycStatus: effectiveKycStatus, profile: profile[0], consents };
 }
 
-export async function createHealthProfileForUser(userId: number, healthIdentityReference: string) {
+export async function createHealthProfileForUser(
+  userId: number,
+  healthIdentityReference: string
+) {
   const db = requireDatabase(await getDb());
   const person = await getOrCreatePersonForUser(userId);
-  if (person.kycStatus !== "verified") {
-    throw new Error("A verified KYC identity is required before creating a health profile");
+  if ((await getEffectiveKycStatus(person.id, person.kycStatus)) !== "verified") {
+    throw new Error(
+      "A verified KYC identity is required before creating a health profile"
+    );
   }
 
-  const existing = await db.select({ id: healthProfiles.id }).from(healthProfiles).where(eq(healthProfiles.personId, person.id)).limit(1);
-  if (existing[0]) throw new Error("A health profile already exists for this verified identity");
+  const existing = await db
+    .select({ id: healthProfiles.id })
+    .from(healthProfiles)
+    .where(eq(healthProfiles.personId, person.id))
+    .limit(1);
+  if (existing[0])
+    throw new Error(
+      "A health profile already exists for this verified identity"
+    );
 
-  const inserted = await db.insert(healthProfiles).values({ personId: person.id, healthIdentityReference });
+  const inserted = await db
+    .insert(healthProfiles)
+    .values({ personId: person.id, healthIdentityReference });
   const profileId = Number(inserted[0].insertId);
   await appendAuditEvent({
     actorUserId: userId,
@@ -2483,12 +4415,20 @@ export async function createHealthProfileForUser(userId: number, healthIdentityR
 
 export async function createHealthConsentForUser(
   userId: number,
-  input: { beneficiaryProviderId: number; purposeCode: string; scopeCodes: string[]; evidenceHash: string; expiresAt: Date },
+  input: {
+    beneficiaryProviderId: number;
+    purposeCode: string;
+    scopeCodes: string[];
+    evidenceHash: string;
+    expiresAt: Date;
+  }
 ) {
   const db = requireDatabase(await getDb());
   const { profile } = await getHealthProfileForUserOrThrow(userId);
-  if (profile.status !== "active") throw new Error("The health profile is not active");
-  if (input.expiresAt <= new Date()) throw new Error("Health consent expiry must be in the future");
+  if (profile.status !== "active")
+    throw new Error("The health profile is not active");
+  if (input.expiresAt <= new Date())
+    throw new Error("Health consent expiry must be in the future");
 
   const provider = await db
     .select({ verificationStatus: healthProviders.verificationStatus })
@@ -2496,7 +4436,9 @@ export async function createHealthConsentForUser(
     .where(eq(healthProviders.id, input.beneficiaryProviderId))
     .limit(1);
   if (!provider[0] || provider[0].verificationStatus !== "verified") {
-    throw new Error("Health consent can only be granted to a verified health provider");
+    throw new Error(
+      "Health consent can only be granted to a verified health provider"
+    );
   }
 
   const scopeCodes = normaliseScopeCodes(input.scopeCodes);
@@ -2517,25 +4459,44 @@ export async function createHealthConsentForUser(
     resourceType: "health_consent",
     resourceId: String(consentId),
     dataClassification: "confidential_sovereign",
-    metadata: { purposeCode: input.purposeCode, providerId: input.beneficiaryProviderId, scopeHash: hashHealthScope(scopeCodes) },
+    metadata: {
+      purposeCode: input.purposeCode,
+      providerId: input.beneficiaryProviderId,
+      scopeHash: hashHealthScope(scopeCodes),
+    },
   });
   return { consentId, status: "active" as const };
 }
 
-export async function revokeHealthConsentForUser(userId: number, consentId: number, revocationReason?: string) {
+export async function revokeHealthConsentForUser(
+  userId: number,
+  consentId: number,
+  revocationReason?: string
+) {
   const db = requireDatabase(await getDb());
   const { profile } = await getHealthProfileForUserOrThrow(userId);
   const consent = await db
     .select({ id: healthConsents.id, status: healthConsents.status })
     .from(healthConsents)
-    .where(and(eq(healthConsents.id, consentId), eq(healthConsents.healthProfileId, profile.id)))
+    .where(
+      and(
+        eq(healthConsents.id, consentId),
+        eq(healthConsents.healthProfileId, profile.id)
+      )
+    )
     .limit(1);
-  if (!consent[0]) throw new Error("Health consent was not found for this identity");
-  if (consent[0].status !== "active") throw new Error("Only an active health consent can be revoked");
+  if (!consent[0])
+    throw new Error("Health consent was not found for this identity");
+  if (consent[0].status !== "active")
+    throw new Error("Only an active health consent can be revoked");
 
   await db
     .update(healthConsents)
-    .set({ status: "revoked", revokedAt: new Date(), revocationReason: revocationReason || null })
+    .set({
+      status: "revoked",
+      revokedAt: new Date(),
+      revocationReason: revocationReason || null,
+    })
     .where(eq(healthConsents.id, consentId));
   await appendAuditEvent({
     actorUserId: userId,
@@ -2567,9 +4528,15 @@ export async function listHealthRecordReferencesForUser(userId: number) {
       amendmentReason: healthRecordReferences.amendmentReason,
     })
     .from(healthRecordReferences)
-    .leftJoin(healthProviders, eq(healthRecordReferences.sourceProviderId, healthProviders.id))
+    .leftJoin(
+      healthProviders,
+      eq(healthRecordReferences.sourceProviderId, healthProviders.id)
+    )
     .where(eq(healthRecordReferences.healthProfileId, profile.id))
-    .orderBy(desc(healthRecordReferences.submittedAt), desc(healthRecordReferences.id));
+    .orderBy(
+      desc(healthRecordReferences.submittedAt),
+      desc(healthRecordReferences.id)
+    );
 }
 
 /** The profile subject can inspect access decisions, but never receives raw scope values or clinical content. */
@@ -2586,7 +4553,10 @@ export async function listHealthAccessLogsForUser(userId: number) {
       createdAt: healthAccessLogs.createdAt,
     })
     .from(healthAccessLogs)
-    .leftJoin(healthProviders, eq(healthAccessLogs.providerId, healthProviders.id))
+    .leftJoin(
+      healthProviders,
+      eq(healthAccessLogs.providerId, healthProviders.id)
+    )
     .where(eq(healthAccessLogs.healthProfileId, profile.id))
     .orderBy(desc(healthAccessLogs.createdAt), desc(healthAccessLogs.id));
 }
@@ -2601,33 +4571,51 @@ export async function submitHealthRecordReferenceForUser(
     sourceProviderId?: number | null;
     amendsRecordId?: number | null;
     amendmentReason?: string | null;
-  },
+  }
 ) {
   const db = requireDatabase(await getDb());
   const { profile } = await getHealthProfileForUserOrThrow(userId);
-  if (profile.status !== "active") throw new Error("The health profile is not active");
-  if (input.occurredAt > new Date()) throw new Error("A health event reference cannot be dated in the future");
+  if (profile.status !== "active")
+    throw new Error("The health profile is not active");
+  if (input.occurredAt > new Date())
+    throw new Error("A health event reference cannot be dated in the future");
 
   const needsVerifiedProvider = input.sourceType !== "patient_statement";
   const sourceProviderId = input.sourceProviderId ?? null;
   if (needsVerifiedProvider) {
-    if (!sourceProviderId) throw new Error("A verified source provider is required for a professional health event reference");
+    if (!sourceProviderId)
+      throw new Error(
+        "A verified source provider is required for a professional health event reference"
+      );
     const role = await getActiveHealthRole(userId, sourceProviderId);
-    if (!role || role.providerStatus !== "verified" || !["provider_admin", "health_professional"].includes(role.role)) {
-      throw new Error("An active professional role at a verified health provider is required");
+    if (
+      !role ||
+      role.providerStatus !== "verified" ||
+      !["provider_admin", "health_professional"].includes(role.role)
+    ) {
+      throw new Error(
+        "An active professional role at a verified health provider is required"
+      );
     }
   } else if (sourceProviderId) {
-    throw new Error("A patient statement must not name a health provider as its source");
+    throw new Error(
+      "A patient statement must not name a health provider as its source"
+    );
   }
 
   if (input.amendsRecordId) {
     const original = await db
-      .select({ id: healthRecordReferences.id, healthProfileId: healthRecordReferences.healthProfileId })
+      .select({
+        id: healthRecordReferences.id,
+        healthProfileId: healthRecordReferences.healthProfileId,
+      })
       .from(healthRecordReferences)
       .where(eq(healthRecordReferences.id, input.amendsRecordId))
       .limit(1);
     if (!original[0] || original[0].healthProfileId !== profile.id) {
-      throw new Error("Only a record reference owned by the same health profile can be amended");
+      throw new Error(
+        "Only a record reference owned by the same health profile can be amended"
+      );
     }
     await db
       .update(healthRecordReferences)
@@ -2653,7 +4641,11 @@ export async function submitHealthRecordReferenceForUser(
     resourceType: "health_record_reference",
     resourceId: String(recordReferenceId),
     dataClassification: "highly_sensitive_health",
-    metadata: { sourceType: input.sourceType, sourceProviderId, amendsRecordId: input.amendsRecordId ?? null },
+    metadata: {
+      sourceType: input.sourceType,
+      sourceProviderId,
+      amendsRecordId: input.amendsRecordId ?? null,
+    },
   });
   return { recordReferenceId, provenanceStatus: "submitted" as const };
 }
@@ -2661,7 +4653,10 @@ export async function submitHealthRecordReferenceForUser(
 export async function reviewHealthRecordReference(
   adminUserId: number,
   recordReferenceId: number,
-  provenanceStatus: Extract<HealthRecordProvenanceStatus, "verified" | "rejected">,
+  provenanceStatus: Extract<
+    HealthRecordProvenanceStatus,
+    "verified" | "rejected"
+  >
 ) {
   const db = requireDatabase(await getDb());
   const current = await db
@@ -2689,7 +4684,12 @@ export async function reviewHealthRecordReference(
 
 export async function requestHealthAccess(
   userId: number,
-  input: { healthProfileId: number; healthProviderId: number; purposeCode: string; scopeCodes: string[] },
+  input: {
+    healthProfileId: number;
+    healthProviderId: number;
+    purposeCode: string;
+    scopeCodes: string[];
+  }
 ) {
   const db = requireDatabase(await getDb());
   const scopeCodes = normaliseScopeCodes(input.scopeCodes);
@@ -2710,17 +4710,25 @@ export async function requestHealthAccess(
     denialCode = "provider_role_not_eligible";
   } else {
     const consents = await db
-      .select({ id: healthConsents.id, scopeJson: healthConsents.scopeJson, expiresAt: healthConsents.expiresAt })
+      .select({
+        id: healthConsents.id,
+        scopeJson: healthConsents.scopeJson,
+        expiresAt: healthConsents.expiresAt,
+      })
       .from(healthConsents)
       .where(
         and(
           eq(healthConsents.healthProfileId, input.healthProfileId),
           eq(healthConsents.beneficiaryProviderId, input.healthProviderId),
           eq(healthConsents.purposeCode, input.purposeCode),
-          eq(healthConsents.status, "active"),
-        ),
+          eq(healthConsents.status, "active")
+        )
       );
-    const matchingConsent = consents.find(consent => consent.expiresAt > new Date() && consentCoversScope(consent.scopeJson, scopeCodes));
+    const matchingConsent = consents.find(
+      consent =>
+        consent.expiresAt > new Date() &&
+        consentCoversScope(consent.scopeJson, scopeCodes)
+    );
     if (matchingConsent) {
       decision = "allowed";
       consentId = matchingConsent.id;
@@ -2741,18 +4749,28 @@ export async function requestHealthAccess(
   });
   await appendAuditEvent({
     actorUserId: userId,
-    action: decision === "allowed" ? "health_access_allowed" : "health_access_denied",
+    action:
+      decision === "allowed" ? "health_access_allowed" : "health_access_denied",
     resourceType: "health_profile",
     resourceId: String(input.healthProfileId),
     dataClassification: "confidential_sovereign",
-    metadata: { purposeCode: input.purposeCode, scopeHash, providerId: input.healthProviderId, denialCode },
+    metadata: {
+      purposeCode: input.purposeCode,
+      scopeHash,
+      providerId: input.healthProviderId,
+      denialCode,
+    },
   });
   return { decision, reasonCode: denialCode };
 }
 
 export async function createHealthProvider(
   adminUserId: number,
-  input: { legalName: string; providerType: HealthProviderType; licenseReference?: string },
+  input: {
+    legalName: string;
+    providerType: HealthProviderType;
+    licenseReference?: string;
+  }
 ) {
   const db = requireDatabase(await getDb());
   const inserted = await db.insert(healthProviders).values({
@@ -2774,10 +4792,13 @@ export async function createHealthProvider(
 export async function updateHealthProviderVerification(
   adminUserId: number,
   providerId: number,
-  verificationStatus: "verified" | "suspended" | "expired" | "rejected",
+  verificationStatus: "verified" | "suspended" | "expired" | "rejected"
 ) {
   const db = requireDatabase(await getDb());
-  await db.update(healthProviders).set({ verificationStatus }).where(eq(healthProviders.id, providerId));
+  await db
+    .update(healthProviders)
+    .set({ verificationStatus })
+    .where(eq(healthProviders.id, providerId));
   await appendAuditEvent({
     actorUserId: adminUserId,
     action: "health_provider_verification_reviewed",
@@ -2791,12 +4812,16 @@ export async function updateHealthProviderVerification(
 
 export async function assignHealthProviderRole(
   adminUserId: number,
-  input: { healthProviderId: number; userId: number; role: HealthProviderRole },
+  input: { healthProviderId: number; userId: number; role: HealthProviderRole }
 ) {
   const db = requireDatabase(await getDb());
   await db
     .insert(healthProviderRoles)
-    .values({ healthProviderId: input.healthProviderId, userId: input.userId, role: input.role })
+    .values({
+      healthProviderId: input.healthProviderId,
+      userId: input.userId,
+      role: input.role,
+    })
     .onDuplicateKeyUpdate({ set: { status: "active" } });
   await appendAuditEvent({
     actorUserId: adminUserId,
@@ -2810,12 +4835,22 @@ export async function assignHealthProviderRole(
 
 export async function requestEmergencyHealthAccess(
   userId: number,
-  input: { healthProfileId: number; healthProviderId: number; reasonCode: string },
+  input: {
+    healthProfileId: number;
+    healthProviderId: number;
+    reasonCode: string;
+  }
 ) {
   const db = requireDatabase(await getDb());
   const role = await getActiveHealthRole(userId, input.healthProviderId);
-  if (!role || role.role !== "emergency_clinician" || role.providerStatus !== "verified") {
-    throw new Error("An active emergency clinician role at a verified health provider is required");
+  if (
+    !role ||
+    role.role !== "emergency_clinician" ||
+    role.providerStatus !== "verified"
+  ) {
+    throw new Error(
+      "An active emergency clinician role at a verified health provider is required"
+    );
   }
   const inserted = await db.insert(healthEmergencyAccessRequests).values({
     healthProfileId: input.healthProfileId,
@@ -2830,7 +4865,10 @@ export async function requestEmergencyHealthAccess(
     resourceType: "health_emergency_access_request",
     resourceId: String(requestId),
     dataClassification: "confidential_sovereign",
-    metadata: { providerId: input.healthProviderId, reasonCode: input.reasonCode },
+    metadata: {
+      providerId: input.healthProviderId,
+      reasonCode: input.reasonCode,
+    },
   });
   return { requestId, status: "requested" as const };
 }
@@ -2840,7 +4878,7 @@ export async function reviewEmergencyHealthAccess(
   requestId: number,
   status: "granted" | "rejected" | "reviewed",
   expiresAt?: Date | null,
-  reviewNote?: string,
+  reviewNote?: string
 ) {
   const db = requireDatabase(await getDb());
   const current = await db
@@ -2848,14 +4886,22 @@ export async function reviewEmergencyHealthAccess(
     .from(healthEmergencyAccessRequests)
     .where(eq(healthEmergencyAccessRequests.id, requestId))
     .limit(1);
-  if (!current[0] || current[0].status !== "requested") throw new Error("Only a requested emergency access record can be reviewed");
+  if (!current[0] || current[0].status !== "requested")
+    throw new Error("Only a requested emergency access record can be reviewed");
   if (status === "granted" && (!expiresAt || expiresAt <= new Date())) {
     throw new Error("Emergency access grant requires a future expiry time");
   }
   const now = new Date();
   await db
     .update(healthEmergencyAccessRequests)
-    .set({ status, grantedAt: status === "granted" ? now : null, expiresAt: status === "granted" ? expiresAt! : null, reviewedByUserId: adminUserId, reviewedAt: now, reviewNote: reviewNote || null })
+    .set({
+      status,
+      grantedAt: status === "granted" ? now : null,
+      expiresAt: status === "granted" ? expiresAt! : null,
+      reviewedByUserId: adminUserId,
+      reviewedAt: now,
+      reviewNote: reviewNote || null,
+    })
     .where(eq(healthEmergencyAccessRequests.id, requestId));
   await appendAuditEvent({
     actorUserId: adminUserId,

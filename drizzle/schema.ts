@@ -180,11 +180,10 @@ export const businessMembershipPermissions = mysqlTable(
   {
     id: int("id").autoincrement().primaryKey(),
     membershipId: int("membershipId")
-      .notNull()
-      .references(() => businessMemberships.id, { onDelete: "restrict" }),
+      .notNull(),
     permissionCode: varchar("permissionCode", { length: 100 }).notNull(),
     status: mysqlEnum("status", ["active", "revoked"]).default("active").notNull(),
-    grantedByUserId: int("grantedByUserId").references(() => users.id, { onDelete: "set null" }),
+    grantedByUserId: int("grantedByUserId"),
     grantedAt: timestamp("grantedAt").defaultNow().notNull(),
     expiresAt: timestamp("expiresAt"),
     revokedAt: timestamp("revokedAt"),
@@ -192,6 +191,16 @@ export const businessMembershipPermissions = mysqlTable(
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
   table => [
+    foreignKey({
+      columns: [table.membershipId],
+      foreignColumns: [businessMemberships.id],
+      name: "bmp_membership_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.grantedByUserId],
+      foreignColumns: [users.id],
+      name: "bmp_granted_by_fk",
+    }).onDelete("set null"),
     uniqueIndex("business_membership_permission_unique").on(table.membershipId, table.permissionCode),
     index("business_membership_permissions_status_idx").on(table.status, table.expiresAt),
   ],

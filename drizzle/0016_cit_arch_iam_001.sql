@@ -24,8 +24,8 @@ ALTER TABLE `audit_events` ADD `requestId` varchar(120);--> statement-breakpoint
 ALTER TABLE `business_entities` ADD `createdByUserId` int;--> statement-breakpoint
 ALTER TABLE `business_entities` ADD `createdByPersonId` int;--> statement-breakpoint
 ALTER TABLE `commerce_purchase_orders` ADD `buyerBusinessId` int;--> statement-breakpoint
-ALTER TABLE `business_membership_permissions` ADD CONSTRAINT `business_membership_permissions_membershipId_business_memberships_id_fk` FOREIGN KEY (`membershipId`) REFERENCES `business_memberships`(`id`) ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE `business_membership_permissions` ADD CONSTRAINT `business_membership_permissions_grantedByUserId_users_id_fk` FOREIGN KEY (`grantedByUserId`) REFERENCES `users`(`id`) ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `business_membership_permissions` ADD CONSTRAINT `bmp_membership_fk` FOREIGN KEY (`membershipId`) REFERENCES `business_memberships`(`id`) ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `business_membership_permissions` ADD CONSTRAINT `bmp_granted_by_fk` FOREIGN KEY (`grantedByUserId`) REFERENCES `users`(`id`) ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX `business_membership_permissions_status_idx` ON `business_membership_permissions` (`status`,`expiresAt`);--> statement-breakpoint
 ALTER TABLE `business_entities` ADD CONSTRAINT `business_entities_createdByUserId_users_id_fk` FOREIGN KEY (`createdByUserId`) REFERENCES `users`(`id`) ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE `business_entities` ADD CONSTRAINT `business_entities_createdByPersonId_persons_id_fk` FOREIGN KEY (`createdByPersonId`) REFERENCES `persons`(`id`) ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
