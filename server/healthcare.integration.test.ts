@@ -404,7 +404,7 @@ describe("healthcare domain isolation", () => {
       });
       const membershipId = Number(insertedMembership[0].insertId);
       await database.insert(businessMembershipPermissions).values(
-        ["business.kyb.submit", "business.kyb.read"].map(permissionCode => ({
+        ["business.read", "business.kyb.submit", "business.kyb.read"].map(permissionCode => ({
           membershipId,
           permissionCode,
           status: "active" as const,
