@@ -389,6 +389,27 @@ describe("healthcare domain isolation", () => {
         legalName: `Healthcare Regression Trade Entity ${crypto.randomUUID().slice(0, 8)}`,
         entityType: "factory",
       });
+      const person = await database
+        .select({ id: persons.id })
+        .from(persons)
+        .where(eq(persons.userId, userId))
+        .limit(1);
+      if (!person[0]) throw new Error(`Person record missing for user ${userId}`);
+      const insertedMembership = await database.insert(businessMemberships).values({
+        businessId: business.id,
+        userId,
+        personId: person[0].id,
+        membershipRole: "authorized_representative",
+        status: "active",
+      });
+      const membershipId = Number(insertedMembership[0].insertId);
+      await database.insert(businessMembershipPermissions).values(
+        ["business.kyb.submit", "business.kyb.read"].map(permissionCode => ({
+          membershipId,
+          permissionCode,
+          status: "active" as const,
+        }))
+      );
       const kybSubmission = await submitKybVerificationForUser(userId, business.id, {
         registrationReference: "healthcare-regression-kyb-reference",
       });

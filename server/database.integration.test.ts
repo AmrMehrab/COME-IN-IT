@@ -29,6 +29,35 @@ import {
   revokeAllBiometricConsentsForUser,
 } from "./db";
 
+async function grantBusinessKybAccess(
+  database: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  userId: number,
+  businessId: number
+) {
+  const person = await database
+    .select({ id: persons.id })
+    .from(persons)
+    .where(eq(persons.userId, userId))
+    .limit(1);
+  if (!person[0]) throw new Error(`Person record missing for user ${userId}`);
+  const inserted = await database.insert(businessMemberships).values({
+    businessId,
+    userId,
+    personId: person[0].id,
+    membershipRole: "authorized_representative",
+    status: "active",
+  });
+  const membershipId = Number(inserted[0].insertId);
+  await database.insert(businessMembershipPermissions).values(
+    ["business.kyb.submit", "business.kyb.read"].map(permissionCode => ({
+      membershipId,
+      permissionCode,
+      status: "active" as const,
+    }))
+  );
+  return membershipId;
+}
+
 describe("database persistence schema", () => {
   it("connects to the configured database and exposes durable-storage tables", async () => {
     const db = await getDb();
@@ -176,6 +205,7 @@ describe("database persistence schema", () => {
         legalName: `Integration Trade Entity ${randomUUID().slice(0, 8)}`,
         entityType: "factory",
       });
+      await grantBusinessKybAccess(database, userId, business.id);
       const submittedKyb = await submitKybVerificationForUser(userId, business.id, {
         registrationReference: "test-kyb-reference",
       });
@@ -284,13 +314,14 @@ describe("database persistence schema", () => {
         legalName: `Eligibility Trade Entity ${randomUUID().slice(0, 8)}`,
         entityType: "factory",
       });
+      const membershipId = await grantBusinessKybAccess(database, userId, business.id);
       await database
         .update(businessMemberships)
         .set({ status: "inactive" })
-        .where(eq(businessMemberships.businessId, business.id));
+        .where(eq(businessMemberships.id, membershipId));
 
       await expect(submitKybVerificationForUser(userId, business.id, {})).rejects.toThrow(
-        "An active authorised business membership is required for KYB submission",
+        "Business operation is not authorized",
       );
     } finally {
       await database.delete(auditEvents).where(eq(auditEvents.actorUserId, userId));
