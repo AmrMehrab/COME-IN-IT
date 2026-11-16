@@ -59,6 +59,11 @@ jobs:
             exit 1
           fi
 
+      - name: Verify tracked migrations on a clean MySQL database
+        run: |
+          mysql -h 127.0.0.1 -uroot -proot -e "CREATE DATABASE come_in_it_migrations_test"
+          DATABASE_URL=mysql://root:root@127.0.0.1:3306/come_in_it_migrations_test pnpm exec drizzle-kit migrate
+
       - name: TypeScript check
         run: pnpm check
 

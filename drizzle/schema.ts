@@ -91,6 +91,61 @@ export const persons = mysqlTable(
   table => [uniqueIndex("persons_user_unique").on(table.userId)],
 );
 
+/** Sensitive contact details stay encrypted; the national ID is never stored raw. */
+export const personIdentityProfiles = mysqlTable(
+  "person_identity_profiles",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    personId: int("personId")
+      .notNull()
+      .references(() => persons.id, { onDelete: "restrict" }),
+    nationalIdHmac: varchar("nationalIdHmac", { length: 64 }).notNull().unique(),
+    maskedNationalId: varchar("maskedNationalId", { length: 24 }).notNull(),
+    encryptedProfile: text("encryptedProfile").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [uniqueIndex("person_identity_profiles_person_unique").on(table.personId)],
+);
+
+/** The only KYC exception is explicitly scoped to initial account setup. */
+export const founderKycExemptions = mysqlTable(
+  "founder_kyc_exemptions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    personId: int("personId")
+      .notNull()
+      .references(() => persons.id, { onDelete: "restrict" }),
+    scope: mysqlEnum("scope", ["initial_onboarding"]).notNull(),
+    actorUserId: int("actorUserId")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [uniqueIndex("founder_kyc_exemptions_person_unique").on(table.personId)],
+);
+
+/** Singleton record: its presence means founder setup is complete and registration may open. */
+export const founderBootstrapRecords = mysqlTable(
+  "founder_bootstrap_records",
+  {
+    id: int("id").primaryKey(),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    personId: int("personId")
+      .notNull()
+      .references(() => persons.id, { onDelete: "restrict" }),
+    createdByUserId: int("createdByUserId")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    uniqueIndex("founder_bootstrap_user_unique").on(table.userId),
+    uniqueIndex("founder_bootstrap_person_unique").on(table.personId),
+  ],
+);
+
 /** A commercial entity is separate from its owner/representative PERSON. */
 export const businessEntities = mysqlTable(
   "business_entities",

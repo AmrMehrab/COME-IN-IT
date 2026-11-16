@@ -6,6 +6,7 @@ import type { Request } from "express";
 import { SignJWT, jwtVerify } from "jose";
 import type { User } from "../../drizzle/schema";
 import * as db from "../db";
+import { isOAuthAccountRegistrationAllowed } from "../founderBootstrap";
 import { ENV } from "./env";
 import type {
   ExchangeTokenRequest,
@@ -293,6 +294,12 @@ class SDKServer {
     if (!user) {
       try {
         const userInfo = await this.getUserInfoWithJwt(sessionToken ?? "");
+        if (userInfo.openId !== sessionUserId) {
+          throw ForbiddenError("Session identity does not match OAuth user info");
+        }
+        if (!(await isOAuthAccountRegistrationAllowed(userInfo.openId))) {
+          throw ForbiddenError("Public registration is closed until founder setup is complete");
+        }
         await db.upsertUser({
           openId: userInfo.openId,
           name: userInfo.name || null,

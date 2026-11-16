@@ -285,6 +285,16 @@ export default function Home() {
               <ShieldCheck className="ml-2 h-4 w-4 text-cyan-300" />
               لوحة المالك
             </Button>}
+            {user?.role === "owner" && <Button
+              variant="outline"
+              size="sm"
+              className="hidden border-cyan-200 bg-cyan-50 text-cyan-800 hover:bg-cyan-100 md:inline-flex"
+              onClick={() => window.location.assign("/founder-setup")}
+              title="تأسيس حساب المؤسس"
+            >
+              <ShieldCheck className="ml-2 h-4 w-4" />
+              تأسيس المؤسس
+            </Button>}
             <Button
               variant="outline"
               size="sm"
