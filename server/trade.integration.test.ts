@@ -312,7 +312,10 @@ describe("trade operations foundation", () => {
       expect(transaction.totalPriceMinor).toBe(1_250_000);
 
       await expect(closeTradeTransactionForUser(buyerUserId, transactionId)).rejects.toThrow("Transaction must be received before closure");
-      await updateTradeTransactionPaymentForUser(buyerUserId, transactionId, "settled");
+      await updateTradeTransactionPaymentForUser(buyerUserId, transactionId, "bank_transfer_pending");
+      await expect(updateTradeTransactionPaymentForUser(buyerUserId, transactionId, "settled")).rejects.toThrow("payment proof reference");
+      await expect(updateTradeTransactionPaymentForUser(supplierUserId, transactionId, "settled", "TEST-PROOF-SUPPLIER")).rejects.toThrow("Only the buyer or current owner");
+      await updateTradeTransactionPaymentForUser(buyerUserId, transactionId, "settled", "TEST-PROOF-BUYER");
 
       const transport = await createTransportJobForUser(supplierUserId, {
         transactionId,
@@ -330,7 +333,7 @@ describe("trade operations foundation", () => {
       const inTransit = await advanceTradeTransportForUser(supplierUserId, transportJobId, "in_transit");
       expect(inTransit.status).toBe("in_transit");
 
-      const delivery = await recordTradeDeliveryForUser(buyerUserId, {
+      const delivery = await recordTradeDeliveryForUser(supplierUserId, {
         transactionId,
         transportJobId,
         deliveredQuantity: 10,
@@ -339,9 +342,17 @@ describe("trade operations foundation", () => {
       });
       deliveryId = delivery.deliveryId;
       expect(delivery.status).toBe("delivered");
+      await expect(recordTradeDeliveryForUser(supplierUserId, {
+        transactionId,
+        transportJobId,
+        deliveredQuantity: 10,
+        proofReference: "proof://e2e-delivery-001",
+      })).rejects.toThrow("TRANSACTION_NOT_DELIVERABLE");
 
+      await expect(acceptTradeDeliveryForUser(supplierUserId, deliveryId, "accepted_full")).rejects.toThrow("RECEIVING_PARTY_REQUIRED");
       const received = await acceptTradeDeliveryForUser(buyerUserId, deliveryId, "accepted_full", "Quantity and condition accepted");
       expect(received.acceptanceStatus).toBe("accepted_full");
+      await expect(acceptTradeDeliveryForUser(buyerUserId, deliveryId, "accepted_full")).rejects.toThrow("DELIVERY_NOT_READY");
       const closed = await closeTradeTransactionForUser(buyerUserId, transactionId);
       expect(closed.status).toBe("closed");
 

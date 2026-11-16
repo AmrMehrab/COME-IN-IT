@@ -136,6 +136,7 @@ describe("database persistence schema", () => {
       openId,
       name: "Verification integration test",
       loginMethod: "integration-test",
+      role: "admin",
     });
     const userId = Number(inserted[0].insertId);
 
@@ -256,6 +257,7 @@ describe("database persistence schema", () => {
       openId: `kyb-eligibility-${randomUUID()}`,
       name: "KYB eligibility integration test",
       loginMethod: "integration-test",
+      role: "admin",
     });
     const userId = Number(inserted[0].insertId);
 
@@ -288,6 +290,35 @@ describe("database persistence schema", () => {
         eq(kycVerifications.personId, (await database.select({ id: persons.id }).from(persons).where(eq(persons.userId, userId)).limit(1))[0]?.id ?? -1),
       );
       await database.delete(businessEntities).where(eq(businessEntities.ownerUserId, userId));
+      await database.delete(users).where(eq(users.id, userId));
+    }
+  }, 20_000);
+
+  it("rejects sensitive business creation when the latest KYC verification is expired", async () => {
+    const db = await getDb();
+    expect(db).not.toBeNull();
+    const database = db!;
+    const inserted = await database.insert(users).values({
+      openId: `expired-kyc-${randomUUID()}`,
+      name: "Expired KYC integration test",
+      loginMethod: "integration-test",
+      role: "admin",
+    });
+    const userId = Number(inserted[0].insertId);
+
+    try {
+      const submission = await submitKycVerificationForUser(userId, { countryCode: "EG" });
+      await reviewKycVerification(userId, submission.latest!.id, "verified", "expired-fixture", new Date(Date.now() - 1_000));
+      await expect(
+        createBusinessEntityForUser(userId, {
+          legalName: `Expired KYC Entity ${randomUUID().slice(0, 8)}`,
+          entityType: "factory",
+        }),
+      ).rejects.toThrow("A verified KYC identity is required before creating a business entity");
+    } finally {
+      await database.delete(auditEvents).where(eq(auditEvents.actorUserId, userId));
+      const person = await database.select({ id: persons.id }).from(persons).where(eq(persons.userId, userId)).limit(1);
+      if (person[0]) await database.delete(kycVerifications).where(eq(kycVerifications.personId, person[0].id));
       await database.delete(users).where(eq(users.id, userId));
     }
   }, 20_000);
