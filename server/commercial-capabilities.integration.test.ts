@@ -44,11 +44,18 @@ async function grantRelationshipPermission(
     status: "active",
   });
   const membershipId = Number(inserted[0].insertId);
-  await database.insert(businessMembershipPermissions).values({
-    membershipId,
-    permissionCode: "trade.match.evaluate",
-    status: "active",
-  });
+  await database.insert(businessMembershipPermissions).values(
+    [
+      "business.kyb.submit",
+      "business.kyb.read",
+      "business.activity.submit",
+      "trade.match.evaluate",
+    ].map(permissionCode => ({
+      membershipId,
+      permissionCode,
+      status: "active" as const,
+    }))
+  );
   return membershipId;
 }
 

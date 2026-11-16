@@ -24,7 +24,10 @@ import {
 } from "./db";
 import {
   auditEvents,
+  businessActivityVerifications,
   businessEntities,
+  businessMembershipPermissions,
+  businessMemberships,
   healthAccessLogs,
   healthConsents,
   healthEmergencyAccessRequests,
@@ -203,6 +206,29 @@ describe("healthcare domain isolation", () => {
       for (const userId of [adminUserId, patientUserId, clinicianUserId]) {
         const person = await database.select({ id: persons.id }).from(persons).where(eq(persons.userId, userId)).limit(1);
         if (person[0]) await database.delete(kycVerifications).where(eq(kycVerifications.personId, person[0].id));
+        const businesses = await database
+          .select({ id: businessEntities.id })
+          .from(businessEntities)
+          .where(eq(businessEntities.createdByUserId, userId));
+        for (const business of businesses) {
+          await database
+            .delete(businessActivityVerifications)
+            .where(eq(businessActivityVerifications.businessId, business.id));
+          await database
+            .delete(kybVerifications)
+            .where(eq(kybVerifications.businessId, business.id));
+        }
+        const memberships = await database
+          .select({ id: businessMemberships.id })
+          .from(businessMemberships)
+          .where(eq(businessMemberships.userId, userId));
+        for (const membership of memberships) {
+          await database
+            .delete(businessMembershipPermissions)
+            .where(eq(businessMembershipPermissions.membershipId, membership.id));
+        }
+        await database.delete(businessMemberships).where(eq(businessMemberships.userId, userId));
+        await database.delete(businessEntities).where(eq(businessEntities.createdByUserId, userId));
         await database.delete(users).where(eq(users.id, userId));
       }
     }
@@ -391,7 +417,26 @@ describe("healthcare domain isolation", () => {
     } finally {
       await database.delete(auditEvents).where(eq(auditEvents.actorUserId, userId));
       await database.delete(kybVerifications).where(eq(kybVerifications.submittedByUserId, userId));
-      await database.delete(businessEntities).where(eq(businessEntities.ownerUserId, userId));
+      const businesses = await database
+        .select({ id: businessEntities.id })
+        .from(businessEntities)
+        .where(eq(businessEntities.createdByUserId, userId));
+      for (const createdBusiness of businesses) {
+        await database
+          .delete(businessActivityVerifications)
+          .where(eq(businessActivityVerifications.businessId, createdBusiness.id));
+      }
+      const memberships = await database
+        .select({ id: businessMemberships.id })
+        .from(businessMemberships)
+        .where(eq(businessMemberships.userId, userId));
+      for (const membership of memberships) {
+        await database
+          .delete(businessMembershipPermissions)
+          .where(eq(businessMembershipPermissions.membershipId, membership.id));
+      }
+      await database.delete(businessMemberships).where(eq(businessMemberships.userId, userId));
+      await database.delete(businessEntities).where(eq(businessEntities.createdByUserId, userId));
       await database.delete(users).where(eq(users.id, userId));
     }
   }, 20_000);

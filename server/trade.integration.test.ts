@@ -118,7 +118,7 @@ describe("trade operations foundation", () => {
           offeringType: "product",
           title: "Unverified trade offering",
         }),
-      ).rejects.toThrow("A verified KYC identity is required before trade access");
+      ).rejects.toThrow("Business operation is not authorized");
 
       const supplierKyc = await submitKycVerificationForUser(supplierUserId, { countryCode: "EG" });
       const buyerKyc = await submitKycVerificationForUser(buyerUserId, { countryCode: "EG" });
@@ -137,8 +137,8 @@ describe("trade operations foundation", () => {
       buyerBusinessId = buyerBusiness.id;
 
       expect(await database.select().from(businessMemberships).where(eq(businessMemberships.businessId, supplierBusinessId))).toHaveLength(0);
-      await seedBusinessMembership(database, supplierUserId, supplierBusinessId, ["business.kyb.submit", "business.activity.submit", "trade.offering.create", "trade.quotation.submit"]);
-      buyerMembershipId = await seedBusinessMembership(database, buyerUserId, buyerBusinessId, ["business.kyb.submit", "business.activity.submit", "commerce.purchase_order.create", "commerce.purchase_order.read", "trade.demand.create", "trade.match.evaluate", "trade.rfq.create", "trade.quotation.accept"]);
+      await seedBusinessMembership(database, supplierUserId, supplierBusinessId, ["business.kyb.submit", "business.kyb.read", "business.activity.submit", "trade.offering.create", "trade.quotation.submit"]);
+      buyerMembershipId = await seedBusinessMembership(database, buyerUserId, buyerBusinessId, ["business.kyb.submit", "business.kyb.read", "business.activity.submit", "commerce.purchase_order.create", "commerce.purchase_order.read", "trade.demand.create", "trade.match.evaluate", "trade.rfq.create", "trade.quotation.accept"]);
 
       const supplierKyb = await submitKybVerificationForUser(supplierUserId, supplierBusinessId, { registrationReference: "trade-supplier-kyb" });
       const buyerKyb = await submitKybVerificationForUser(buyerUserId, buyerBusinessId, { registrationReference: "trade-buyer-kyb" });
@@ -316,8 +316,8 @@ describe("trade operations foundation", () => {
       supplierBusinessId = supplierBusiness.id;
       buyerBusinessId = buyerBusiness.id;
 
-      await seedBusinessMembership(database, supplierUserId, supplierBusinessId, ["business.kyb.submit", "business.activity.submit", "trade.offering.create", "trade.quotation.submit", "trade.transport.assign", "trade.transport.advance", "trade.delivery.record"]);
-      await seedBusinessMembership(database, buyerUserId, buyerBusinessId, ["business.kyb.submit", "business.activity.submit", "trade.demand.create", "trade.match.evaluate", "trade.rfq.create", "trade.quotation.accept", "trade.payment.update", "trade.delivery.accept", "trade.transaction.close", "trade.transaction.read"]);
+      await seedBusinessMembership(database, supplierUserId, supplierBusinessId, ["business.kyb.submit", "business.kyb.read", "business.activity.submit", "trade.offering.create", "trade.quotation.submit", "trade.transport.assign", "trade.transport.advance", "trade.delivery.record"]);
+      await seedBusinessMembership(database, buyerUserId, buyerBusinessId, ["business.kyb.submit", "business.kyb.read", "business.activity.submit", "trade.demand.create", "trade.match.evaluate", "trade.rfq.create", "trade.quotation.accept", "trade.payment.update", "trade.delivery.accept", "trade.transaction.close", "trade.transaction.read"]);
 
       const supplierKyb = await submitKybVerificationForUser(supplierUserId, supplierBusinessId, { registrationReference: "trade-e2e-supplier-kyb" });
       const buyerKyb = await submitKybVerificationForUser(buyerUserId, buyerBusinessId, { registrationReference: "trade-e2e-buyer-kyb" });

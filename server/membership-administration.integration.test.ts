@@ -126,6 +126,12 @@ describe("business membership administration integration", () => {
       });
       await grantBusinessPermissionForAdministrator(adminUserId, {
         membershipId,
+        permissionCode: "business.kyb.read",
+        expiresAt: null,
+        reviewReference: "approved case IAM-1003b",
+      });
+      await grantBusinessPermissionForAdministrator(adminUserId, {
+        membershipId,
         permissionCode: "business.activity.submit",
         expiresAt: null,
         reviewReference: "approved case IAM-1004",

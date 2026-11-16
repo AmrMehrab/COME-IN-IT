@@ -5,6 +5,7 @@ import {
   auditEvents,
   biometricConsents,
   businessEntities,
+  businessMembershipPermissions,
   businessMemberships,
   kycVerifications,
   kybVerifications,
@@ -242,7 +243,17 @@ describe("database persistence schema", () => {
     } finally {
       await database.delete(auditEvents).where(eq(auditEvents.actorUserId, userId));
       await database.delete(kybVerifications).where(eq(kybVerifications.submittedByUserId, userId));
-      await database.delete(businessEntities).where(eq(businessEntities.ownerUserId, userId));
+      const memberships = await database
+        .select({ id: businessMemberships.id })
+        .from(businessMemberships)
+        .where(eq(businessMemberships.userId, userId));
+      for (const membership of memberships) {
+        await database
+          .delete(businessMembershipPermissions)
+          .where(eq(businessMembershipPermissions.membershipId, membership.id));
+      }
+      await database.delete(businessMemberships).where(eq(businessMemberships.userId, userId));
+      await database.delete(businessEntities).where(eq(businessEntities.createdByUserId, userId));
       await database.delete(users).where(eq(users.id, userId));
     }
   }, 20_000);
@@ -287,7 +298,17 @@ describe("database persistence schema", () => {
       await database.delete(kycVerifications).where(
         eq(kycVerifications.personId, (await database.select({ id: persons.id }).from(persons).where(eq(persons.userId, userId)).limit(1))[0]?.id ?? -1),
       );
-      await database.delete(businessEntities).where(eq(businessEntities.ownerUserId, userId));
+      const memberships = await database
+        .select({ id: businessMemberships.id })
+        .from(businessMemberships)
+        .where(eq(businessMemberships.userId, userId));
+      for (const membership of memberships) {
+        await database
+          .delete(businessMembershipPermissions)
+          .where(eq(businessMembershipPermissions.membershipId, membership.id));
+      }
+      await database.delete(businessMemberships).where(eq(businessMemberships.userId, userId));
+      await database.delete(businessEntities).where(eq(businessEntities.createdByUserId, userId));
       await database.delete(users).where(eq(users.id, userId));
     }
   }, 20_000);
