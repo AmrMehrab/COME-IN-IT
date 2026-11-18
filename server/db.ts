@@ -193,7 +193,7 @@ async function enforceTradePolicy(userId: number, action: PolicyAction, resource
 }
 
 async function appendAuditEvent(input: {
-  actorUserId: number;
+  actorUserId: number | null;
   action: string;
   resourceType?: string;
   resourceId: string;
@@ -562,6 +562,50 @@ export async function getKycVerificationForUser(userId: number) {
   return { personId: person.id, lifecycleStatus: person.kycStatus, latest };
 }
 
+export async function getKycSubmissionContextForUser(userId: number) {
+  const db = requireDatabase(await getDb());
+  const person = await getOrCreatePersonForUser(userId);
+  const latest = await db
+    .select({
+      id: kycVerifications.id,
+      status: kycVerifications.status,
+      providerReference: kycVerifications.providerReference,
+    })
+    .from(kycVerifications)
+    .where(eq(kycVerifications.personId, person.id))
+    .orderBy(desc(kycVerifications.submittedAt), desc(kycVerifications.id))
+    .limit(1);
+
+  return { personId: person.id, lifecycleStatus: person.kycStatus, latest: latest[0] ?? null };
+}
+
+export async function updatePendingKycProviderReferenceForUser(
+  userId: number,
+  verificationId: number,
+  providerReference: string,
+) {
+  const db = requireDatabase(await getDb());
+  const person = await getOrCreatePersonForUser(userId);
+  const current = await db
+    .select({ status: kycVerifications.status })
+    .from(kycVerifications)
+    .where(
+      and(
+        eq(kycVerifications.id, verificationId),
+        eq(kycVerifications.personId, person.id),
+      ),
+    )
+    .limit(1);
+  if (!current[0] || current[0].status !== "pending") {
+    throw new Error("The pending KYC verification cannot be resumed");
+  }
+
+  await db
+    .update(kycVerifications)
+    .set({ providerReference })
+    .where(eq(kycVerifications.id, verificationId));
+}
+
 export async function submitKycVerificationForUser(userId: number, input: KycSubmissionInput) {
   const db = requireDatabase(await getDb());
   const person = await getOrCreatePersonForUser(userId);
@@ -585,6 +629,50 @@ export async function submitKycVerificationForUser(userId: number, input: KycSub
   });
 
   return getKycVerificationForUser(userId);
+}
+
+export async function applyDiditKycStatus(
+  providerReference: string,
+  nextStatus: "pending" | "verified" | "rejected" | "expired",
+  providerStatus: string,
+  eventId: string,
+) {
+  const db = requireDatabase(await getDb());
+  const current = await db
+    .select({
+      id: kycVerifications.id,
+      personId: kycVerifications.personId,
+      status: kycVerifications.status,
+    })
+    .from(kycVerifications)
+    .where(eq(kycVerifications.providerReference, providerReference))
+    .orderBy(desc(kycVerifications.submittedAt), desc(kycVerifications.id))
+    .limit(1);
+  const verification = current[0];
+  if (!verification) return "not_found" as const;
+  if (nextStatus === "pending" || verification.status !== "pending") return "ignored" as const;
+
+  const now = new Date();
+  await db
+    .update(kycVerifications)
+    .set({
+      status: nextStatus,
+      reviewReason: `Didit status: ${providerStatus}`,
+      reviewedByUserId: null,
+      reviewedAt: now,
+    })
+    .where(eq(kycVerifications.id, verification.id));
+  await db.update(persons).set({ kycStatus: nextStatus }).where(eq(persons.id, verification.personId));
+  await appendAuditEvent({
+    actorUserId: null,
+    action: "kyc_verification_provider_status_updated",
+    resourceType: "kyc_verification",
+    resourceId: String(verification.id),
+    dataClassification: "confidential_sovereign",
+    metadata: { provider: "didit", providerStatus, eventId, lifecycleStatus: nextStatus },
+  });
+
+  return "updated" as const;
 }
 
 type BiometricConsentType = "face_verification" | "liveness_detection";

@@ -4,6 +4,7 @@ import * as db from "./db";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { startDiditKycVerificationForUser } from "./didit";
 
 const businessEntityType = z.enum([
   "factory",
@@ -116,16 +117,7 @@ export const appRouter = router({
   verification: router({
     kyc: router({
       me: protectedProcedure.query(({ ctx }) => db.getKycVerificationForUser(ctx.user.id)),
-      submit: protectedProcedure
-        .input(
-          z.object({
-            providerReference: referenceField,
-            identityReference: referenceField,
-            countryCode: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/).optional(),
-            documentMetadataJson: metadataField,
-          }),
-        )
-        .mutation(({ ctx, input }) => db.submitKycVerificationForUser(ctx.user.id, input)),
+      submit: protectedProcedure.mutation(({ ctx }) => startDiditKycVerificationForUser(ctx.user.id)),
       review: adminProcedure
         .input(reviewInput)
         .mutation(({ ctx, input }) =>
