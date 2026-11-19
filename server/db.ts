@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, desc, eq, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   auditEvents,
@@ -35,6 +35,7 @@ import {
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { assertPolicy, evaluatePolicy, PolicyAction, PolicyContext, PolicyDecision } from "./policyEngine";
+import { isConfiguredFounder, selectBusinessCreationPath } from "./founderProvisioning";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -400,35 +401,103 @@ export async function listBusinessEntitiesForUser(userId: number) {
 
 export async function createBusinessEntityForUser(userId: number, input: BusinessEntityInput) {
   const db = requireDatabase(await getDb());
+  const account = await db
+    .select({ openId: users.openId, role: users.role })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!account[0]) throw new Error("The authenticated user does not exist");
+
+  const isFounder = isConfiguredFounder(
+    account[0].openId,
+    ENV.ownerOpenId,
+    account[0].role === "owner",
+  );
   const person = await getOrCreatePersonForUser(userId);
-  const currentKyc = await getCurrentKycForPerson(person.id);
-  if (!currentKyc || !isCurrentlyVerified(currentKyc.status, currentKyc.expiresAt)) {
-    throw new Error("A verified KYC identity is required before creating a business entity");
-  }
-  const inserted = await db.insert(businessEntities).values({
-    ownerUserId: userId,
-    ownerPersonId: person.id,
-    legalName: input.legalName,
-    tradeName: input.tradeName || null,
-    registrationNumber: input.registrationNumber || null,
-    entityType: input.entityType,
-  });
-  const businessId = Number(inserted[0].insertId);
 
-  await db.insert(businessMemberships).values({
-    businessId,
-    userId,
-    personId: person.id,
-    membershipRole: "owner",
-  });
-  await appendAuditEvent({
-    actorUserId: userId,
-    action: "business_entity_created",
-    resourceType: "business_entity",
-    resourceId: String(businessId),
+  const businessId = await db.transaction(async tx => {
+    const lockedPerson = await tx
+      .select({
+        userId: persons.userId,
+        founderExemptionUsedAt: persons.founderInitialKycExemptionUsedAt,
+      })
+      .from(persons)
+      .where(eq(persons.id, person.id))
+      .limit(1)
+      .for("update");
+    if (!lockedPerson[0] || lockedPerson[0].userId !== userId) {
+      throw new Error("The person identity is not linked to the authenticated user");
+    }
+
+    const currentKyc = await tx
+      .select({ status: kycVerifications.status, expiresAt: kycVerifications.expiresAt })
+      .from(kycVerifications)
+      .where(eq(kycVerifications.personId, person.id))
+      .orderBy(desc(kycVerifications.submittedAt), desc(kycVerifications.id))
+      .limit(1);
+    const hasCurrentVerifiedKyc = Boolean(
+      currentKyc[0] && isCurrentlyVerified(currentKyc[0].status, currentKyc[0].expiresAt),
+    );
+    const creationPath = selectBusinessCreationPath({
+      hasCurrentVerifiedKyc,
+      isFounder,
+      founderExemptionAlreadyUsed: Boolean(lockedPerson[0].founderExemptionUsedAt),
+    });
+    if (!creationPath) {
+      throw new Error("A verified KYC identity is required before creating a business entity");
+    }
+
+    if (creationPath === "founder_initial_kyc_exemption") {
+      await tx
+        .update(persons)
+        .set({ founderInitialKycExemptionUsedAt: new Date() })
+        .where(and(eq(persons.id, person.id), isNull(persons.founderInitialKycExemptionUsedAt)));
+    }
+
+    const inserted = await tx.insert(businessEntities).values({
+      ownerUserId: userId,
+      ownerPersonId: person.id,
+      legalName: input.legalName,
+      tradeName: input.tradeName || null,
+      registrationNumber: input.registrationNumber || null,
+      entityType: input.entityType,
+    });
+    const newBusinessId = Number(inserted[0].insertId);
+
+    await tx.insert(businessMemberships).values({
+      businessId: newBusinessId,
+      userId,
+      personId: person.id,
+      membershipRole: "owner",
+      status: "active",
+    });
+    await tx.insert(auditEvents).values({
+      actorUserId: userId,
+      action: "business_entity_created",
+      resourceType: "business_entity",
+      resourceId: String(newBusinessId),
+      dataClassification: "restricted",
+      metadataJson: JSON.stringify({ creationPath }),
+    });
+    if (creationPath === "founder_initial_kyc_exemption") {
+      await tx.insert(auditEvents).values({
+        actorUserId: userId,
+        action: "founder_initial_kyc_exemption_used",
+        resourceType: "person",
+        resourceId: String(person.id),
+        dataClassification: "restricted",
+        metadataJson: JSON.stringify({ businessId: newBusinessId }),
+      });
+    }
+
+    return newBusinessId;
   });
 
-  const created = await db.select().from(businessEntities).where(eq(businessEntities.id, businessId)).limit(1);
+  const created = await db
+    .select()
+    .from(businessEntities)
+    .where(eq(businessEntities.id, businessId))
+    .limit(1);
   if (!created[0]) throw new Error("Failed to load the created business entity");
   return created[0];
 }
