@@ -85,10 +85,14 @@ export const persons = mysqlTable(
     ])
       .default("restricted")
       .notNull(),
+    founderInitialKycExemptionUsedAt: timestamp("founderInitialKycExemptionUsedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  table => [uniqueIndex("persons_user_unique").on(table.userId)],
+  table => [
+    uniqueIndex("persons_user_unique").on(table.userId),
+    uniqueIndex("persons_id_user_unique").on(table.id, table.userId),
+  ],
 );
 
 /** A commercial entity is separate from its owner/representative PERSON. */
@@ -99,9 +103,7 @@ export const businessEntities = mysqlTable(
     ownerUserId: int("ownerUserId")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    ownerPersonId: int("ownerPersonId")
-      .notNull()
-      .references(() => persons.id, { onDelete: "restrict" }),
+    ownerPersonId: int("ownerPersonId").notNull(),
     legalName: varchar("legalName", { length: 255 }).notNull(),
     tradeName: varchar("tradeName", { length: 255 }),
     registrationNumber: varchar("registrationNumber", { length: 120 }),
@@ -139,6 +141,11 @@ export const businessEntities = mysqlTable(
     index("business_entities_owner_idx").on(table.ownerUserId),
     index("business_entities_owner_person_idx").on(table.ownerPersonId),
     uniqueIndex("business_entities_registration_unique").on(table.registrationNumber),
+    foreignKey({
+      name: "business_entities_owner_person_user_fk",
+      columns: [table.ownerPersonId, table.ownerUserId],
+      foreignColumns: [persons.id, persons.userId],
+    }).onDelete("restrict"),
   ],
 );
 
@@ -153,9 +160,7 @@ export const businessMemberships = mysqlTable(
     userId: int("userId")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    personId: int("personId")
-      .notNull()
-      .references(() => persons.id, { onDelete: "restrict" }),
+    personId: int("personId").notNull(),
     membershipRole: mysqlEnum("membershipRole", [
       "owner",
       "authorized_representative",
@@ -173,6 +178,11 @@ export const businessMemberships = mysqlTable(
     index("business_memberships_user_idx").on(table.userId),
     index("business_memberships_person_idx").on(table.personId),
     uniqueIndex("business_memberships_business_user_unique").on(table.businessId, table.userId),
+    foreignKey({
+      name: "business_memberships_person_user_fk",
+      columns: [table.personId, table.userId],
+      foreignColumns: [persons.id, persons.userId],
+    }).onDelete("restrict"),
   ],
 );
 
