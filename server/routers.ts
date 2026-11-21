@@ -68,6 +68,16 @@ export const appRouter = router({
     }),
   }),
 
+  onboarding: router({
+    bootstrap: protectedProcedure.mutation(async ({ ctx }) => {
+      const identity = await db.getKycVerificationForUser(ctx.user.id);
+      return {
+        personId: identity.personId,
+        lifecycleStatus: identity.lifecycleStatus,
+      };
+    }),
+  }),
+
   bookmarks: router({
     list: protectedProcedure.query(({ ctx }) => db.listSpecificationBookmarks(ctx.user.id)),
     toggle: protectedProcedure
