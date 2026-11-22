@@ -1,5 +1,5 @@
+// @ts-ignore -- Vercel bundles this generated JavaScript entry during the build.
 import app from "../dist/api.js";
 
-// The Express application is bundled during the project build so Vercel's
-// Function runtime receives a self-contained local module graph.
+// Reuse the single bundled Express application for all API endpoints.
 export default app;
