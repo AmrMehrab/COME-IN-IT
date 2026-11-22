@@ -116,8 +116,8 @@ export default function Home() {
             COME IN IT مساحة موحدة للأفراد والأنشطة الموثقة. أنشئ حسابك بهوية واحدة، أكمل التحقق من هويتك، ثم استخدم الخدمات والصلاحيات التي تستوفي شروطها.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <button type="button" onClick={() => begin("register")} className="group inline-flex min-h-13 items-center justify-center gap-3 rounded-2xl bg-[#0f2a44] px-6 py-4 text-base font-bold text-white shadow-xl shadow-[#0f2a44]/15 transition hover:-translate-y-0.5 hover:bg-[#173d5e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2">
-              {isAuthenticated ? "أكمل ملفك الشخصي" : "ابدأ الآن"}
+            <button type="button" onClick={continueWithOAuth} className="group inline-flex min-h-13 items-center justify-center gap-3 rounded-2xl bg-[#0f2a44] px-6 py-4 text-base font-bold text-white shadow-xl shadow-[#0f2a44]/15 transition hover:-translate-y-0.5 hover:bg-[#173d5e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2">
+              {isAuthenticated ? "أكمل ملفك الشخصي" : "المتابعة باستخدام Google"}
               <ArrowLeft className="h-5 w-5 transition-transform group-hover:-translate-x-1" aria-hidden="true" />
             </button>
             {!isAuthenticated && (
@@ -205,7 +205,7 @@ export default function Home() {
           </div>
           <DialogFooter className="gap-2 sm:flex-row-reverse">
             <button type="button" onClick={continueWithOAuth} className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#0f2a44] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#173d5e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2">
-              {authMode === "login" ? "متابعة تسجيل الدخول" : "إنشاء الحساب والمتابعة"}
+              متابعة باستخدام Google
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </button>
             <button type="button" onClick={() => setAuthMode(null)} className="min-h-12 rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500">
