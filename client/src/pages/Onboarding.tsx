@@ -16,7 +16,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { useLocation } from "wouter";
-import { startLogin } from "@/const";
+
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { getKycDisplayState, getProfileCompletion } from "@/lib/onboarding-status";
@@ -131,7 +131,7 @@ export default function Onboarding() {
 
   const tryStartLogin = () => {
     try {
-      startLogin({ returnTo: "/onboarding" });
+      window.location.assign("/api/oauth/google/start");
     } catch {
       setLogoutError("تعذّر بدء المصادقة في هذه البيئة. حاول لاحقًا.");
     }
@@ -163,8 +163,8 @@ export default function Onboarding() {
       <main lang="ar" dir="rtl" className="flex min-h-screen items-center justify-center bg-[#f5f8fa] px-4 py-12 text-[#0f2a44]">
         <section className="w-full max-w-lg rounded-[2rem] border border-slate-200 bg-white p-7 text-center shadow-xl shadow-slate-900/5 sm:p-10">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-teal-50 text-teal-800"><LockKeyhole className="h-7 w-7" aria-hidden="true" /></div>
-          <h1 className="mt-5 text-2xl font-black">سجّل الدخول لمتابعة ملفك</h1>
-          <p className="mt-3 text-sm leading-7 text-slate-600">سنستخدم حساب Manus OAuth الحالي ونستعيد الحساب الموجود إن كان مرتبطًا به. لا ننشئ كلمة مرور محلية.</p>
+          <h1 className="mt-5 text-2xl font-black">سجّل الدخول بحساب Google لمتابعة ملفك</h1>
+          <p className="mt-3 text-sm leading-7 text-slate-600">سنستخدم حساب Google لاستعادة الحساب الموجود أو إنشاء حساب جديد. لا ننشئ كلمة مرور محلية.</p>
           <button type="button" onClick={tryStartLogin} className="mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#0f2a44] px-5 py-3 font-bold text-white hover:bg-[#173d5e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2">تسجيل الدخول للمتابعة <ArrowLeft className="h-4 w-4" aria-hidden="true" /></button>
           {logoutError && <p role="alert" className="mt-4 text-sm text-rose-700">{logoutError}</p>}
           <button type="button" onClick={() => setLocation("/")} className="mt-4 text-sm font-semibold text-teal-800 underline underline-offset-4">العودة إلى الصفحة الرئيسية</button>
