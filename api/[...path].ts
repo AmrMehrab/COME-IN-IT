@@ -1,7 +1,5 @@
-import app from "../server/_core/app.ts";
+import app from "../dist/api.js";
 
-// Vercel routes /api/* requests through this catch-all Express Function.
-// Keep the TypeScript extension explicit so the Vercel Node builder resolves
-// and bundles the local Express application instead of leaving an unresolved
-// extensionless ESM import in the deployed Function.
+// The Express application is bundled during the project build so Vercel's
+// Function runtime receives a self-contained local module graph.
 export default app;
