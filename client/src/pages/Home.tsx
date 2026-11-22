@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { ArrowLeft, Check, Fingerprint, LockKeyhole, ShieldCheck, UserRound } from "lucide-react";
-import { startLogin, consumeLoginReturnTo } from "@/const";
+import { consumeLoginReturnTo } from "@/const";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
   Dialog,
@@ -67,7 +67,7 @@ export default function Home() {
 
   const continueWithOAuth = () => {
     try {
-      startLogin({ returnTo: "/onboarding" });
+      window.location.assign("/api/oauth/google/start");
     } catch {
       setAuthMode(null);
       setAuthError("لم نتمكن من بدء تسجيل الدخول في هذه البيئة. يرجى المحاولة لاحقًا.");
@@ -153,7 +153,7 @@ export default function Home() {
             <div className="mt-7 space-y-5">
               <div className="flex gap-4">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#0f2a44] text-sm font-black text-white">01</span>
-                <div><h3 className="font-bold text-slate-800">حسابك عبر Manus OAuth</h3><p className="mt-1 text-sm leading-6 text-slate-500">دخول آمن أو إنشاء حساب جديد بالمسار نفسه.</p></div>
+                <div><h3 className="font-bold text-slate-800">حسابك عبر Google</h3><p className="mt-1 text-sm leading-6 text-slate-500">دخول آمن أو إنشاء حساب جديد بالمسار نفسه.</p></div>
               </div>
               <div className="mr-4 h-5 border-r border-dashed border-slate-300" />
               <div className="flex gap-4">
@@ -196,8 +196,8 @@ export default function Home() {
             </DialogTitle>
             <DialogDescription className="text-sm leading-7 text-slate-600">
               {authMode === "login"
-                ? "سجّل الدخول عبر Manus OAuth لاستعادة حسابك وملفك المرتبط."
-                : "سيُنشأ الحساب أو يُستعاد عبر Manus OAuth؛ لا توجد كلمة مرور محلية ولا حسابات مكررة."}
+                ? "سجّل الدخول بحساب Google لاستعادة حسابك وملفك المرتبط."
+                : "سيُنشأ الحساب أو يُستعاد عبر Google؛ لا توجد كلمة مرور محلية ولا حسابات مكررة."}
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-7 text-slate-600">
