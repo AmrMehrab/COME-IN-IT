@@ -1,6 +1,5 @@
+// @ts-ignore -- Vercel bundles this generated JavaScript entry during the build.
 import app from "../../dist/api.js";
 
-// Explicit tRPC procedure route. Vercel's top-level catch-all serves other
-// API endpoints; this route ensures nested /api/trpc/<procedure> URLs are
-// dispatched to the same bundled Express application.
+// Reuse the single bundled Express application for all API endpoints.
 export default app;
