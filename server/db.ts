@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { and, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import { createPool } from "mysql2/promise";
 import {
   auditEvents,
   biometricConsents,
@@ -43,7 +44,27 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      const databaseUrl = new URL(process.env.DATABASE_URL);
+      const isLocalDatabase = ["localhost", "127.0.0.1", "::1"].includes(databaseUrl.hostname);
+      const pool = createPool({
+        host: databaseUrl.hostname,
+        port: Number(databaseUrl.port || 3306),
+        user: decodeURIComponent(databaseUrl.username),
+        password: decodeURIComponent(databaseUrl.password),
+        database: decodeURIComponent(databaseUrl.pathname.replace(/^\//, "")),
+        ...(isLocalDatabase
+          ? {}
+          : {
+              ssl: {
+                minVersion: "TLSv1.2" as const,
+                rejectUnauthorized: true,
+              },
+            }),
+        connectionLimit: 1,
+        maxIdle: 1,
+        enableKeepAlive: true,
+      });
+      _db = drizzle(pool);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
