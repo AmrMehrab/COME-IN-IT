@@ -1,7 +1,6 @@
 import {
   foreignKey,
   index,
-  bigint,
   int,
   mysqlEnum,
   mysqlTable,
@@ -13,7 +12,7 @@ import {
 
 /** OAuth account used for authentication; it is not itself a commercial entity. */
 export const users = mysqlTable("users", {
-  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  id: int("id").autoincrement().primaryKey(),
   phone: varchar("phone", { length: 20 }).unique(),
   passwordHash: varchar("password_hash", { length: 255 }),
   name: varchar("full_name", { length: 100 }),
