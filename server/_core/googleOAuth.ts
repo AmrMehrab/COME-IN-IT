@@ -95,8 +95,8 @@ export function registerGoogleOAuthRoutes(app: Express) {
       const email = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : null;
 
       // Never silently merge two identities just because their email strings match.
-      const existingByEmail = email ? await db.getUserByEmail(email) : undefined;
-      if (existingByEmail && existingByEmail.openId !== openId) {
+      const existingByEmail = email ? await db.getUsersByEmail(email) : [];
+      if (existingByEmail.some(existing => existing.openId !== openId)) {
         return fail(res, "account_link_required");
       }
 
