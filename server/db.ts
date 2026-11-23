@@ -131,6 +131,18 @@ export async function getUserByOpenId(openId: string) {
   return result[0];
 }
 
+/** Find a matching email without implicitly linking it to a different login identity. */
+export async function getUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot find user by email: database not available");
+    return undefined;
+  }
+
+  const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  return result[0];
+}
+
 async function getOrCreatePersonForUser(userId: number) {
   const db = requireDatabase(await getDb());
   const existing = await db.select().from(persons).where(eq(persons.userId, userId)).limit(1);
