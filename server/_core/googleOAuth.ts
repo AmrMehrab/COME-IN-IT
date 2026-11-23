@@ -92,7 +92,14 @@ export function registerGoogleOAuthRoutes(app: Express) {
 
       const openId = `google:${payload.sub}`;
       const name = typeof payload.name === "string" ? payload.name : null;
-      const email = typeof payload.email === "string" ? payload.email : null;
+      const email = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : null;
+
+      // Never silently merge two identities just because their email strings match.
+      const existingByEmail = email ? await db.getUsersByEmail(email) : [];
+      if (existingByEmail.some(existing => existing.openId !== openId)) {
+        return fail(res, "account_link_required");
+      }
+
       await db.upsertUser({
         openId,
         name,
@@ -104,14 +111,14 @@ export function registerGoogleOAuthRoutes(app: Express) {
       if (!user) throw new Error("Google user could not be persisted");
 
       const sessionToken = await sdk.createSessionToken(openId, {
-        name: name ?? "",
+        name: name ?? email ?? "Google user",
         expiresInMs: ONE_YEAR_MS,
       });
       res.cookie(COOKIE_NAME, sessionToken, {
         ...getSessionCookieOptions(req),
         maxAge: ONE_YEAR_MS,
       });
-      return res.redirect(302, "/");
+      return res.redirect(302, "/onboarding");
     } catch (err) {
       console.error("[Google OAuth] Callback failed", err);
       return fail(res, "google_failed");

@@ -38,7 +38,11 @@ import { ENV } from "./_core/env";
 import { assertPolicy, evaluatePolicy, PolicyAction, PolicyContext, PolicyDecision } from "./policyEngine";
 import { isConfiguredFounder, selectBusinessCreationPath } from "./founderProvisioning";
 
-let _db: ReturnType<typeof drizzle> | null = null;
+function createDatabase(pool: ReturnType<typeof createPool>) {
+  return drizzle(pool);
+}
+
+let _db: ReturnType<typeof createDatabase> | null = null;
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
@@ -64,7 +68,7 @@ export async function getDb() {
         maxIdle: 1,
         enableKeepAlive: true,
       });
-      _db = drizzle(pool);
+      _db = createDatabase(pool);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -129,6 +133,17 @@ export async function getUserByOpenId(openId: string) {
 
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
   return result[0];
+}
+
+/** Find a matching email without implicitly linking it to a different login identity. */
+export async function getUsersByEmail(email: string) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot find users by email: database not available");
+    return [];
+  }
+
+  return db.select().from(users).where(eq(users.email, email));
 }
 
 async function getOrCreatePersonForUser(userId: number) {
@@ -436,8 +451,13 @@ export async function createBusinessEntityForUser(userId: number, input: Busines
     .limit(1);
   if (!account[0]) throw new Error("The authenticated user does not exist");
 
+  const accountOpenId = account[0].openId;
+  if (typeof accountOpenId !== "string" || accountOpenId.length === 0) {
+    throw new Error("The authenticated user is missing a valid identity");
+  }
+
   const isFounder = isConfiguredFounder(
-    account[0].openId,
+    accountOpenId,
     ENV.ownerOpenId,
     account[0].role === "owner",
   );
