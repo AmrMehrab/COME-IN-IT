@@ -116,6 +116,7 @@ export function registerGoogleOAuthRoutes(app: Express) {
 
       const sessionToken = await sdk.createSessionToken(openId, {
         name: user.name ?? name ?? email ?? "Google user",
+        appId: "come-in-it",
         expiresInMs: ONE_YEAR_MS,
       });
       res.cookie(COOKIE_NAME, sessionToken, {
