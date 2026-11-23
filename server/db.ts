@@ -64,7 +64,7 @@ export async function getDb() {
         maxIdle: 1,
         enableKeepAlive: true,
       });
-      _db = drizzle(pool);
+      _db = drizzle(pool) as ReturnType<typeof drizzle>;
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -447,8 +447,13 @@ export async function createBusinessEntityForUser(userId: number, input: Busines
     .limit(1);
   if (!account[0]) throw new Error("The authenticated user does not exist");
 
+  const accountOpenId = account[0].openId;
+  if (typeof accountOpenId !== "string" || accountOpenId.length === 0) {
+    throw new Error("The authenticated user is missing a valid identity");
+  }
+
   const isFounder = isConfiguredFounder(
-    account[0].openId,
+    accountOpenId,
     ENV.ownerOpenId,
     account[0].role === "owner",
   );
