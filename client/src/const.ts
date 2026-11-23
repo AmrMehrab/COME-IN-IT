@@ -2,6 +2,7 @@ const AUTH_RETURN_TO_KEY = "comein.auth.returnTo";
 const ALLOWED_AUTH_RETURN_PATHS = new Set(["/onboarding"]);
 
 type LoginOptions = { returnTo?: string };
+type ClickEventArgument = { preventDefault: () => void };
 
 /** Consume only an allow-listed same-origin path from the tab that began login. */
 export const consumeLoginReturnTo = (): string | null => {
@@ -19,7 +20,8 @@ export const consumeLoginReturnTo = (): string | null => {
  * The only interactive sign-in entry point for COME IN IT.
  * Google OAuth is started by the server so client secrets never reach the browser.
  */
-export const startGoogleLogin = (options?: LoginOptions) => {
+export const startGoogleLogin = (argument?: LoginOptions | ClickEventArgument) => {
+  const options = argument && "returnTo" in argument ? argument : undefined;
   try {
     if (options?.returnTo && ALLOWED_AUTH_RETURN_PATHS.has(options.returnTo)) {
       window.sessionStorage.setItem(AUTH_RETURN_TO_KEY, options.returnTo);
