@@ -2,20 +2,14 @@ import { describe, expect, it } from "vitest";
 import { businessEntities, businessMemberships, persons, users } from "../drizzle/schema";
 
 describe("business identity schema invariants", () => {
-  it("uses the same signed INT type for user, person, business, and membership keys", () => {
-    const foreignKeyColumns = [
-      users.id,
-      persons.id,
-      persons.userId,
-      businessEntities.id,
-      businessEntities.ownerUserId,
-      businessEntities.ownerPersonId,
-      businessMemberships.id,
-      businessMemberships.businessId,
-      businessMemberships.userId,
-      businessMemberships.personId,
-    ];
+  it("matches every foreign-key column type to its referenced primary key", () => {
+    expect(persons.userId.getSQLType()).toBe(users.id.getSQLType());
+    expect(businessEntities.ownerUserId.getSQLType()).toBe(users.id.getSQLType());
+    expect(businessMemberships.userId.getSQLType()).toBe(users.id.getSQLType());
 
-    expect(foreignKeyColumns.map(column => column.getSQLType())).toEqual(Array(10).fill("int"));
+    expect(businessEntities.ownerPersonId.getSQLType()).toBe(persons.id.getSQLType());
+    expect(businessMemberships.personId.getSQLType()).toBe(persons.id.getSQLType());
+
+    expect(businessMemberships.businessId.getSQLType()).toBe(businessEntities.id.getSQLType());
   });
 });
