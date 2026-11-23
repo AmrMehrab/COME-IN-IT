@@ -1,6 +1,7 @@
 import {
   foreignKey,
   index,
+  bigint,
   int,
   mysqlEnum,
   mysqlTable,
@@ -12,15 +13,20 @@ import {
 
 /** OAuth account used for authentication; it is not itself a commercial entity. */
 export const users = mysqlTable("users", {
-  id: int("id").autoincrement().primaryKey(),
-  openId: varchar("openId", { length: 64 }).notNull().unique(),
-  name: text("name"),
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  phone: varchar("phone", { length: 20 }).notNull().unique(),
+  passwordHash: varchar("password_hash", { length: 255 }).notNull(),
+  name: varchar("full_name", { length: 100 }),
+  nationalId: varchar("national_id", { length: 20 }),
+  kycStatus: varchar("kyc_status", { length: 20 }).default("pending"),
+  kycRejectedReason: text("kyc_rejected_reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+  openId: varchar("openId", { length: 255 }).unique(),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin", "owner"]).default("user").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-  lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow(),
+  lastSignedIn: timestamp("lastSignedIn").defaultNow(),
 });
 
 /**
