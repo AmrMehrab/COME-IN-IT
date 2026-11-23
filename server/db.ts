@@ -38,7 +38,11 @@ import { ENV } from "./_core/env";
 import { assertPolicy, evaluatePolicy, PolicyAction, PolicyContext, PolicyDecision } from "./policyEngine";
 import { isConfiguredFounder, selectBusinessCreationPath } from "./founderProvisioning";
 
-let _db: ReturnType<typeof drizzle> | null = null;
+function createDatabase(pool: ReturnType<typeof createPool>) {
+  return drizzle(pool);
+}
+
+let _db: ReturnType<typeof createDatabase> | null = null;
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
@@ -64,7 +68,7 @@ export async function getDb() {
         maxIdle: 1,
         enableKeepAlive: true,
       });
-      _db = drizzle(pool) as ReturnType<typeof drizzle>;
+      _db = createDatabase(pool);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
