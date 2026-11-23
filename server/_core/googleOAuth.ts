@@ -111,7 +111,7 @@ export function registerGoogleOAuthRoutes(app: Express) {
         ...getSessionCookieOptions(req),
         maxAge: ONE_YEAR_MS,
       });
-      return res.redirect(302, "/");
+      return res.redirect(302, "/onboarding");
     } catch (err) {
       console.error("[Google OAuth] Callback failed", err);
       return fail(res, "google_failed");
