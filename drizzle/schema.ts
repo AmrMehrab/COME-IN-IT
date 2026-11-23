@@ -1,4 +1,5 @@
 import {
+  bigint,
   foreignKey,
   index,
   int,
@@ -12,7 +13,7 @@ import {
 
 /** OAuth account used for authentication; it is not itself a commercial entity. */
 export const users = mysqlTable("users", {
-  id: int("id").autoincrement().primaryKey(),
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
@@ -31,7 +32,7 @@ export const persons = mysqlTable(
   "persons",
   {
     id: int("id").autoincrement().primaryKey(),
-    userId: int("userId")
+    userId: bigint("userId", { mode: "number" })
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     kycStatus: mysqlEnum("kycStatus", [
@@ -100,7 +101,7 @@ export const businessEntities = mysqlTable(
   "business_entities",
   {
     id: int("id").autoincrement().primaryKey(),
-    ownerUserId: int("ownerUserId")
+    ownerUserId: bigint("ownerUserId", { mode: "number" })
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     ownerPersonId: int("ownerPersonId").notNull(),
@@ -157,7 +158,7 @@ export const businessMemberships = mysqlTable(
     businessId: int("businessId")
       .notNull()
       .references(() => businessEntities.id, { onDelete: "cascade" }),
-    userId: int("userId")
+    userId: bigint("userId", { mode: "number" })
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     personId: int("personId").notNull(),
@@ -206,7 +207,7 @@ export const kycVerifications = mysqlTable(
     countryCode: varchar("countryCode", { length: 2 }),
     documentMetadataJson: text("documentMetadataJson"),
     reviewReason: text("reviewReason"),
-    reviewedByUserId: int("reviewedByUserId").references(() => users.id, { onDelete: "set null" }),
+    reviewedByUserId: bigint("reviewedByUserId", { mode: "number" }).references(() => users.id, { onDelete: "set null" }),
     submittedAt: timestamp("submittedAt").defaultNow().notNull(),
     reviewedAt: timestamp("reviewedAt"),
     expiresAt: timestamp("expiresAt"),
@@ -259,7 +260,7 @@ export const kybVerifications = mysqlTable(
     businessId: int("businessId")
       .notNull()
       .references(() => businessEntities.id, { onDelete: "cascade" }),
-    submittedByUserId: int("submittedByUserId")
+    submittedByUserId: bigint("submittedByUserId", { mode: "number" })
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
     status: mysqlEnum("status", ["pending", "verified", "suspended", "expired", "rejected"])
@@ -269,7 +270,7 @@ export const kybVerifications = mysqlTable(
     registrationReference: varchar("registrationReference", { length: 180 }),
     documentMetadataJson: text("documentMetadataJson"),
     reviewReason: text("reviewReason"),
-    reviewedByUserId: int("reviewedByUserId").references(() => users.id, { onDelete: "set null" }),
+    reviewedByUserId: bigint("reviewedByUserId", { mode: "number" }).references(() => users.id, { onDelete: "set null" }),
     submittedAt: timestamp("submittedAt").defaultNow().notNull(),
     reviewedAt: timestamp("reviewedAt"),
     expiresAt: timestamp("expiresAt"),
@@ -288,7 +289,7 @@ export const specificationBookmarks = mysqlTable(
   "specification_bookmarks",
   {
     id: int("id").autoincrement().primaryKey(),
-    userId: int("userId")
+    userId: bigint("userId", { mode: "number" })
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     sectionId: int("sectionId").notNull(),
@@ -305,7 +306,7 @@ export const auditEvents = mysqlTable(
   "audit_events",
   {
     id: int("id").autoincrement().primaryKey(),
-    actorUserId: int("actorUserId").references(() => users.id, { onDelete: "set null" }),
+    actorUserId: bigint("actorUserId", { mode: "number" }).references(() => users.id, { onDelete: "set null" }),
     action: varchar("action", { length: 120 }).notNull(),
     resourceType: varchar("resourceType", { length: 120 }).notNull(),
     resourceId: varchar("resourceId", { length: 120 }).notNull(),
@@ -407,7 +408,7 @@ export const healthRecordReferences = mysqlTable(
       .notNull()
       .references(() => healthProfiles.id, { onDelete: "restrict" }),
     sourceProviderId: int("sourceProviderId").references(() => healthProviders.id, { onDelete: "set null" }),
-    submittedByUserId: int("submittedByUserId")
+    submittedByUserId: bigint("submittedByUserId", { mode: "number" })
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
     sourceType: mysqlEnum("sourceType", [
@@ -454,7 +455,7 @@ export const healthProviderRoles = mysqlTable(
     healthProviderId: int("healthProviderId")
       .notNull()
       .references(() => healthProviders.id, { onDelete: "cascade" }),
-    userId: int("userId")
+    userId: bigint("userId", { mode: "number" })
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     role: mysqlEnum("role", ["provider_admin", "health_professional", "emergency_clinician", "compliance_reviewer"])
@@ -512,7 +513,7 @@ export const healthAccessLogs = mysqlTable(
       .notNull()
       .references(() => healthProfiles.id, { onDelete: "restrict" }),
     providerId: int("providerId").references(() => healthProviders.id, { onDelete: "set null" }),
-    actorUserId: int("actorUserId").references(() => users.id, { onDelete: "set null" }),
+    actorUserId: bigint("actorUserId", { mode: "number" }).references(() => users.id, { onDelete: "set null" }),
     consentId: int("consentId").references(() => healthConsents.id, { onDelete: "set null" }),
     purposeCode: varchar("purposeCode", { length: 80 }).notNull(),
     requestedScopeHash: varchar("requestedScopeHash", { length: 180 }).notNull(),
@@ -534,7 +535,7 @@ export const healthEmergencyAccessRequests = mysqlTable(
     id: int("id").autoincrement().primaryKey(),
     healthProfileId: int("healthProfileId").notNull(),
     providerId: int("providerId").notNull(),
-    requesterUserId: int("requesterUserId")
+    requesterUserId: bigint("requesterUserId", { mode: "number" })
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
     reasonCode: varchar("reasonCode", { length: 100 }).notNull(),
@@ -543,7 +544,7 @@ export const healthEmergencyAccessRequests = mysqlTable(
       .notNull(),
     grantedAt: timestamp("grantedAt"),
     expiresAt: timestamp("expiresAt"),
-    reviewedByUserId: int("reviewedByUserId").references(() => users.id, { onDelete: "set null" }),
+    reviewedByUserId: bigint("reviewedByUserId", { mode: "number" }).references(() => users.id, { onDelete: "set null" }),
     reviewedAt: timestamp("reviewedAt"),
     reviewNote: text("reviewNote"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -630,7 +631,7 @@ export const businessActivityVerifications = mysqlTable(
       .default("unverified")
       .notNull(),
     evidenceReference: varchar("evidenceReference", { length: 180 }),
-    reviewedByUserId: int("reviewedByUserId").references(() => users.id, { onDelete: "set null" }),
+    reviewedByUserId: bigint("reviewedByUserId", { mode: "number" }).references(() => users.id, { onDelete: "set null" }),
     reviewedAt: timestamp("reviewedAt"),
     expiresAt: timestamp("expiresAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -660,7 +661,7 @@ export const tradeOfferings = mysqlTable(
       .references(() => businessEntities.id, { onDelete: "restrict" }),
     individualProfileId: int("individualProfileId"),
     supplierKind: mysqlEnum("supplierKind", ["business", "individual"]).default("business").notNull(),
-    createdByUserId: int("createdByUserId")
+    createdByUserId: bigint("createdByUserId", { mode: "number" })
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
     offeringType: mysqlEnum("offeringType", ["product", "service", "used_asset"]).notNull(),
@@ -712,7 +713,7 @@ export const commercePurchaseOrders = mysqlTable(
   "commerce_purchase_orders",
   {
     id: int("id").autoincrement().primaryKey(),
-    buyerUserId: int("buyerUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
+    buyerUserId: bigint("buyerUserId", { mode: "number" }).notNull().references(() => users.id, { onDelete: "restrict" }),
     supplierBusinessId: int("supplierBusinessId"),
     offeringId: int("offeringId"),
     partnerKey: varchar("partnerKey", { length: 120 }).notNull(),
@@ -756,7 +757,7 @@ export const tradeDemands = mysqlTable(
       .references(() => businessEntities.id, { onDelete: "restrict" }),
     requesterIndividualProfileId: int("requesterIndividualProfileId"),
     requesterKind: mysqlEnum("requesterKind", ["business", "individual"]).default("business").notNull(),
-    createdByUserId: int("createdByUserId")
+    createdByUserId: bigint("createdByUserId", { mode: "number" })
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
     demandType: mysqlEnum("demandType", ["product", "service", "used_asset"]).notNull(),
@@ -796,7 +797,7 @@ export const tradeMatches = mysqlTable(
     offeringId: int("offeringId")
       .notNull()
       .references(() => tradeOfferings.id, { onDelete: "cascade" }),
-    evaluatedByUserId: int("evaluatedByUserId")
+    evaluatedByUserId: bigint("evaluatedByUserId", { mode: "number" })
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
     score: int("score").notNull(),
@@ -824,7 +825,7 @@ export const tradeRfqs = mysqlTable(
   {
     id: int("id").autoincrement().primaryKey(),
     matchId: int("matchId").notNull().references(() => tradeMatches.id, { onDelete: "restrict" }),
-    createdByUserId: int("createdByUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
+    createdByUserId: bigint("createdByUserId", { mode: "number" }).notNull().references(() => users.id, { onDelete: "restrict" }),
     requestedQuantity: int("requestedQuantity").notNull(),
     quantityUnit: varchar("quantityUnit", { length: 32 }).notNull(),
     deliveryTermsJson: text("deliveryTermsJson").notNull(),
@@ -843,7 +844,7 @@ export const tradeQuotations = mysqlTable(
   {
     id: int("id").autoincrement().primaryKey(),
     rfqId: int("rfqId").notNull().references(() => tradeRfqs.id, { onDelete: "cascade" }),
-    supplierUserId: int("supplierUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
+    supplierUserId: bigint("supplierUserId", { mode: "number" }).notNull().references(() => users.id, { onDelete: "restrict" }),
     quantity: int("quantity").notNull(),
     unitPriceMinor: int("unitPriceMinor").notNull(),
     currencyCode: varchar("currencyCode", { length: 3 }).default("EGP").notNull(),
@@ -939,7 +940,7 @@ export const transactionDeliveries = mysqlTable(
     transportJobId: int("transportJobId").notNull().references(() => transportJobs.id, { onDelete: "restrict" }),
     deliveredQuantity: int("deliveredQuantity").notNull(),
     acceptanceStatus: mysqlEnum("acceptanceStatus", ["pending", "accepted_full", "accepted_partial", "rejected", "damaged", "shortage"]).default("pending").notNull(),
-    receivedByUserId: int("receivedByUserId").references(() => users.id, { onDelete: "set null" }),
+    receivedByUserId: bigint("receivedByUserId", { mode: "number" }).references(() => users.id, { onDelete: "set null" }),
     proofReference: varchar("proofReference", { length: 180 }),
     notes: text("notes"),
     deliveredAt: timestamp("deliveredAt"),
@@ -955,7 +956,7 @@ export const transactionEvidence = mysqlTable(
   {
     id: int("id").autoincrement().primaryKey(),
     transactionId: int("transactionId").notNull().references(() => tradeTransactions.id, { onDelete: "cascade" }),
-    createdByUserId: int("createdByUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
+    createdByUserId: bigint("createdByUserId", { mode: "number" }).notNull().references(() => users.id, { onDelete: "restrict" }),
     evidenceType: mysqlEnum("evidenceType", ["quotation", "agreement", "proof_of_delivery", "receipt", "invoice", "quality_certificate", "other"]).notNull(),
     reference: varchar("reference", { length: 180 }).notNull(),
     metadataJson: text("metadataJson"),
@@ -969,7 +970,7 @@ export const transactionDisputes = mysqlTable(
   {
     id: int("id").autoincrement().primaryKey(),
     transactionId: int("transactionId").notNull().references(() => tradeTransactions.id, { onDelete: "cascade" }),
-    filedByUserId: int("filedByUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
+    filedByUserId: bigint("filedByUserId", { mode: "number" }).notNull().references(() => users.id, { onDelete: "restrict" }),
     reason: varchar("reason", { length: 500 }).notNull(),
     status: mysqlEnum("status", ["open", "under_review", "resolved", "rejected"]).default("open").notNull(),
     resolution: text("resolution"),
