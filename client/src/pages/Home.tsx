@@ -19,6 +19,10 @@ const oauthErrorMessages: Record<string, string> = {
   invalid_state: "تعذّر تأكيد جلسة الدخول الآمنة. ابدأ المحاولة من جديد.",
   missing_parameters: "لم تكتمل عملية الدخول. أعد المحاولة من البداية.",
   failed: "تعذّر إكمال تسجيل الدخول الآن. حاول مرة أخرى لاحقًا.",
+  google_not_configured: "تسجيل الدخول بجوجل غير مُعدّ بالكامل على هذه البيئة.",
+  google_failed: "تعذّر إكمال المصادقة مع Google. حاول مرة أخرى.",
+  invalid_google_state: "تعذّر تأكيد طلب الدخول الآمن. ابدأ المحاولة من جديد.",
+  account_link_required: "تعذر تحديد حسابك السابق بأمان. تواصل مع الدعم لربط الحساب دون فقد بيانات التوثيق.",
 };
 
 function BrandMark() {
