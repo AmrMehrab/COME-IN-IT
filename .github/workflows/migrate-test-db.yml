@@ -7,6 +7,7 @@ on:
       - feature/CIT-DB-SCHEMA-ALIGN-001
     paths:
       - .github/workflows/migrate-test-db.yml
+      - drizzle.config.ts
 
 permissions:
   contents: read
