@@ -104,7 +104,7 @@ export function registerGoogleOAuthRoutes(app: Express) {
       if (!user) throw new Error("Google user could not be persisted");
 
       const sessionToken = await sdk.createSessionToken(openId, {
-        name: name ?? "",
+        name: name ?? email ?? "Google user",
         expiresInMs: ONE_YEAR_MS,
       });
       res.cookie(COOKIE_NAME, sessionToken, {
