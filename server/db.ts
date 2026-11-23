@@ -115,7 +115,14 @@ async function getOrCreatePersonForUser(userId: number) {
   const existing = await db.select().from(persons).where(eq(persons.userId, userId)).limit(1);
   if (existing[0]) return existing[0];
 
-  await db.insert(persons).values({ userId });
+  try {
+    await db.insert(persons).values({ userId });
+  } catch (error) {
+    // A concurrent OAuth/onboarding request may have inserted the unique row first.
+    const raced = await db.select().from(persons).where(eq(persons.userId, userId)).limit(1);
+    if (raced[0]) return raced[0];
+    throw error;
+  }
   const created = await db.select().from(persons).where(eq(persons.userId, userId)).limit(1);
   if (!created[0]) throw new Error("Failed to create person identity");
   return created[0];
