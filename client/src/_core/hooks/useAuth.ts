@@ -10,7 +10,7 @@ type UseAuthOptions = {
 
 export function useAuth(options?: UseAuthOptions) {
   // Login is started via startGoogleLogin() in the effect below, only when we actually
-  // navigate — never during render. startGoogleLogin() mints a one-time nonce + writes
+  // navigate — never during render. startGoogleLogin() starts the server-owned Google OAuth state flow
   // the state cookie, so calling it per render would overwrite the cookie and
   // desync it from an in-flight login's `state`.
   const { redirectOnUnauthenticated = false, redirectPath } = options ?? {};
@@ -66,7 +66,7 @@ export function useAuth(options?: UseAuthOptions) {
     if (typeof window === "undefined") return;
     if (redirectPath && window.location.pathname === redirectPath) return;
 
-    // Navigate at this moment only. startGoogleLogin() mints the nonce + cookie itself.
+    // Navigate at this moment only. startGoogleLogin() delegates state-cookie creation to the server.
     if (redirectPath) {
       window.location.href = redirectPath;
     } else {
