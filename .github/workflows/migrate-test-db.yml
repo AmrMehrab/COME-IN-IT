@@ -36,7 +36,7 @@ jobs:
           fi
           node <<'NODE'
           const url = new URL(process.env.DATABASE_URL);
-          const database = decodeURIComponent(url.pathname.replace(/^\\/+/, ""));
+          const database = decodeURIComponent(url.pathname.split("/").filter(Boolean).join("/"));
           if (database !== "come_in_it_test") {
             console.error("Blocked: DATABASE_URL must target come_in_it_test. No migration was run.");
             process.exit(1);
