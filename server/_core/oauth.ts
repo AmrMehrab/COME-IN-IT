@@ -56,7 +56,16 @@ export function registerOAuthRoutes(app: Express) {
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
-      res.redirect(302, "/");
+      // KYC check: new / unverified user -> force onboarding, verified -> home
+    let kycStatus = "unverified";
+    try {
+      const dbUser = await db.getUserByOpenId(userInfo.openId);
+      if (dbUser) {
+        const kyc = await db.getKycVerificationForUser(dbUser.id);
+        if (kyc?.lifecycleStatus) kycStatus = kyc.lifecycleStatus;
+      }
+    } catch {}
+    res.redirect(302, kycStatus === "verified" ? "/" : "/?onboarding=1");
     } catch (error) {
       console.error("[OAuth] Callback failed", error);
       res.status(500).json({ error: "OAuth callback failed" });
