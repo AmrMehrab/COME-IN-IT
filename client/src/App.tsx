@@ -5,6 +5,11 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
+import { NewCustomerOnboarding } from "./components/NewCustomerOnboarding";
+
+function KycPage() {
+  return <NewCustomerOnboarding open={true} onOpenChange={() => { window.location.href = "/"; }} onNavigate={(path: string) => { window.location.href = path; }} />;
+}
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
