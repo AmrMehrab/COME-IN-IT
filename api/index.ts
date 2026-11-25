@@ -1,5 +1,18 @@
 import { SignJWT } from "jose";
 export default async function handler(req: any, res: any) {
+  if (req.url?.includes("/api/didit/create-session")) {
+    try {
+      const r = await fetch("https://verification.didit.me/v2/session/", { method: "POST", headers: { "Content-Type": "application/json", "X-Api-Key": process.env.DIDIT_API_KEY || "" }, body: JSON.stringify({ workflow_id: process.env.DIDIT_WORKFLOW_ID || "", callback: "https://come-in-it.vercel.app/kyc?didit=done", vendor_data: "comeinit-user" }) });
+      const j: any = await r.json();
+      res.status(r.status).json({ url: j.url, session_id: j.session_id, status: j.status, error: j.message || j.error });
+    } catch (e: any) { res.status(500).json({ error: String(e) }); }
+    return;
+  }
+  if (req.url?.includes("/api/webhooks/didit")) {
+    try { console.log("didit webhook", req.body); } catch {}
+    res.status(200).json({ ok: true });
+    return;
+  }
   if (req.url?.includes("/api/kyc")) { res.status(200).json({ ok: true }); return; }
   if (req.url?.includes("/api/auth/me")) {
     try {
