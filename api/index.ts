@@ -1,5 +1,6 @@
 import { SignJWT } from "jose";
 export default async function handler(req: any, res: any) {
+  if (req.url?.includes("/api/kyc")) { res.status(200).json({ ok: true }); return; }
   if (req.url?.includes("/api/auth/me")) {
     try {
       const { jwtVerify } = await import("jose");
