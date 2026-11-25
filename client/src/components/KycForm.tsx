@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 export function KycForm() {
-  const qp = new URLSearchParams(window.location.search); const diditStatus = qp.get("status") || (window.location.search.length > 1 ? "approved" : ""); const [msg, setMsg] = useState(diditStatus==="approved" ? "Approved - go to your profile." : diditStatus==="pending" ? "In Review - please wait." : diditStatus==="declined" ? "Declined - try again." : ""); const [done, setDone] = useState(diditStatus==="approved" || diditStatus==="pending");
+  const qp = new URLSearchParams(window.location.search); const rawStatus = (qp.get("status") || (window.location.search.length > 1 ? "approved" : "")).toLowerCase(); const diditStatus = rawStatus.includes("approv") ? "approved" : rawStatus.includes("review") || rawStatus.includes("progress") || rawStatus.includes("pending") ? "pending" : rawStatus.includes("declin") || rawStatus.includes("reject") || rawStatus.includes("abandon") ? "declined" : rawStatus; const [msg, setMsg] = useState(diditStatus==="approved" ? "Approved - go to your profile." : diditStatus==="pending" ? "In Review - please wait." : diditStatus==="declined" ? "Declined - try again." : ""); const [done, setDone] = useState(diditStatus==="approved" || diditStatus==="pending");
   const [loading, setLoading] = useState(false);
   const start = async () => { if (done) { window.location.href = "/profile"; return; }
     setLoading(true);
