@@ -15,6 +15,7 @@ function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
+      <Route path="/kyc" component={KycPage} />
       <Route path={"/"} component={Home} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
