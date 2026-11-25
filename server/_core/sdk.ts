@@ -231,28 +231,10 @@ class SDKServer {
     }
   }
 
-  async getUserInfoWithJwt(
-    jwtToken: string
-  ): Promise<GetUserInfoWithJwtResponse> {
-    const payload: GetUserInfoWithJwtRequest = {
-      jwtToken,
-      projectId: ENV.appId,
-    };
-
-    const { data } = await this.client.post<GetUserInfoWithJwtResponse>(
-      GET_USER_INFO_WITH_JWT_PATH,
-      payload
-    );
-
-    const loginMethod = this.deriveLoginMethod(
-      (data as any)?.platforms,
-      (data as any)?.platform ?? data.platform ?? null
-    );
-    return {
-      ...(data as any),
-      platform: loginMethod,
-      loginMethod,
-    } as GetUserInfoWithJwtResponse;
+  async getUserInfoWithJwt(jwtToken: string): Promise<GetUserInfoWithJwtResponse> {
+    const verified = await jwtVerify(jwtToken, secretKey, { algorithms: ["HS256"] });
+    const payload = verified.payload as any;
+    return { userInfo: { openId: payload.openId as string, name: (payload.name as string) ?? null, email: null, loginMethod: "google" } } as unknown as GetUserInfoWithJwtResponse;
   }
 
   async authenticateRequest(req: Request): Promise<AuthenticatedUser> {
