@@ -63,6 +63,6 @@ export default async function handler(req: any, res: any) {
       .setExpirationTime("365d")
       .sign(secretKey);
     res.setHeader("Set-Cookie", [`session=${sessionToken}; Path=/; Max-Age=31536000; Secure; SameSite=None`, `auth_token=${sessionToken}; Path=/; Max-Age=31536000; Secure; SameSite=None`]);
-    res.redirect(302, "/?onboarding=1");
+    res.redirect(302, "/kyc");
   } catch (e: any) { console.error(e); res.status(500).json({ error: "callback failed", details: String(e) }); }
 }
