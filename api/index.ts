@@ -1,5 +1,25 @@
 import { SignJWT } from "jose";
 export default async function handler(req: any, res: any) {
+  if (req.url?.includes("/api/auth/me")) {
+    try {
+      const { jwtVerify } = await import("jose");
+      const cookie = req.headers.cookie || "";
+      const m = cookie.match(/(?:session|auth_token)=([^;]+)/);
+      const token = m?.[1];
+      if (!token) { res.status(401).json({ user: null }); return; }
+      const secretKey = new TextEncoder().encode(process.env.JWT_SECRET || "dev-secret-change-me");
+      const { payload }: any = await jwtVerify(token, secretKey, { algorithms: ["HS256"] });
+      const openId = payload.openId as string;
+      let dbUser: any = null;
+      try {
+        const { db } = await import("../server/_core/db");
+        dbUser = await db.getUserByOpenId(openId);
+      } catch {}
+      res.status(200).json({ user: { id: dbUser?.id ?? openId, openId, name: payload.name || dbUser?.name || "", email: dbUser?.email || null, loginMethod: "google" } });
+    } catch (e: any) { res.status(401).json({ user: null, error: String(e) }); }
+    return;
+  }
+
   const host = req.headers.host;
   const proto = req.headers["x-forwarded-proto"] || "https";
   const redirectUri = `${proto}://${host}/api/oauth/google/callback`;
