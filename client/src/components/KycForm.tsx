@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 export function KycForm() {
-  const [msg, setMsg] = useState("");
+  const isBack = window.location.search.includes("didit"); const [msg, setMsg] = useState(isBack ? "Verified via Didit - you can continue." : ""); const [done, setDone] = useState(isBack);
   const [loading, setLoading] = useState(false);
-  const start = async () => {
+  const start = async () => { if (done) { window.location.href = "/"; return; }
     setLoading(true);
     setMsg("جارٍ تجهيز جلسة التوثيق...");
     try {
