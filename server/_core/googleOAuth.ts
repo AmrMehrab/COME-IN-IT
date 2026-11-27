@@ -90,19 +90,23 @@ export function registerGoogleOAuthRoutes(app: Express) {
         throw new Error("Google identity is missing a verified email or subject");
       }
 
-      const openId = `google:${payload.sub}`;
+      const googleOpenId = `google:${payload.sub}`;
       const name = typeof payload.name === "string" ? payload.name : null;
       const email = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : null;
 
-      // Never silently merge two identities just because their email strings match.
+      // Preserve an existing COME IN IT account (and its PERSON/KYC/business
+      // relations) when Google proves the same email. Ambiguous matches fail
+      // closed; no account is merged by an unverified email.
       const existingByEmail = email ? await db.getUsersByEmail(email) : [];
-      if (existingByEmail.some(existing => existing.openId !== openId)) {
+      if (existingByEmail.length > 1) {
         return fail(res, "account_link_required");
       }
+      const existingUser = existingByEmail[0];
+      const openId = existingUser?.openId ?? googleOpenId;
 
       await db.upsertUser({
         openId,
-        name,
+        ...(existingUser ? {} : { name }),
         email,
         loginMethod: "google",
         lastSignedIn: new Date(),
@@ -111,7 +115,8 @@ export function registerGoogleOAuthRoutes(app: Express) {
       if (!user) throw new Error("Google user could not be persisted");
 
       const sessionToken = await sdk.createSessionToken(openId, {
-        name: name ?? email ?? "Google user",
+        name: user.name ?? name ?? email ?? "Google user",
+        appId: "come-in-it",
         expiresInMs: ONE_YEAR_MS,
       });
       res.cookie(COOKIE_NAME, sessionToken, {

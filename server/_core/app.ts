@@ -1,7 +1,6 @@
 import "dotenv/config";
 import express from "express";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { registerOAuthRoutes } from "./oauth";
 import { registerGoogleOAuthRoutes } from "./googleOAuth";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
@@ -35,7 +34,6 @@ app.post("/api/webhooks/didit", async (req, res) => {
 
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 registerStorageProxy(app);
-registerOAuthRoutes(app);
 registerGoogleOAuthRoutes(app);
 
 app.use(
